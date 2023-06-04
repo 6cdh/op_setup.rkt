@@ -1,15 +1,16 @@
 #lang racket
 
 ;; TOC
-;; 1. requires
-;; 2. array utils
-;; 3. fenwick tree
-;; 4. array representation of tree
-;; 5. segment tree
-;; 6. algorithms
-;; 7. data structure helpers
-;; 8. syntax
-;; 9. other functions
+;; * requires
+;; * array utils
+;; * fenwick tree
+;; * array representation of tree
+;; * segment tree
+;; * disjoint set
+;; * algorithms
+;; * data structure helpers
+;; * syntax
+;; * other functions
 
 ;; requires
 
@@ -126,6 +127,22 @@
                (op (aref tree (tree-left k)) (aref tree (tree-right k))))
         (loop (tree-father k))))))
 
+;; disjoint set
+
+(define (make-dsu n)
+  (build-vector n values))
+
+(define (dsu-rootof dsu x)
+  (define r (aref dsu x))
+  (cond [(= r x)
+         x]
+        [else
+         (aset! dsu x (dsu-rootof dsu r))
+         (aref dsu x)]))
+
+(define (dsu-union! dsu a b)
+  (aset! dsu (dsu-rootof dsu a) (dsu-rootof dsu b)))
+
 ;; algorithms
 
 ;; range-sum : (listof number) -> procedure
@@ -187,26 +204,26 @@
     (rec t '()))
 
   (define (rec h)
-    (match-define (list closest d) (heap-min h))
+    (match-define (cons d closest) (heap-min h))
     (heap-remove-min! h)
     (cond [(equal? closest t)
-           (list (build-path prev) d)]
+           (cons (build-path prev) d)]
           [else
            (for ([edge (edgeof closest)])
-             (match-define (list to cost) edge)
+             (match-define (cons to cost) edge)
              (define d1 (+ d cost))
              (when (or (not (hash-has-key? dist to))
                        (< d1 (hash-ref dist to)))
                (hash-set! dist to d1)
                (hash-set! prev to closest)
-               (heap-add! h (list to d1))))
+               (heap-add! h (cons d1 to))))
 
            (if (zero? (heap-count h))
                #f
                (rec h))]))
 
-  (define h (make-heap (λ (a b) (<= (second a) (second b)))))
-  (heap-add! h (list s 0))
+  (define h (make-heap (λ (a b) (<= (car a) (car b)))))
+  (heap-add! h (cons 0 s))
   (rec h))
 
 ;; data structure helpers
@@ -237,15 +254,15 @@
   (set! fn (tracef (quote fn) fn)))
 
 ;; print a expr and its value
-(define-syntax-rule (debugv var)
-  (debug (quote var) var))
+(define-syntax-rule (debugv var ...)
+  (let ()
+    (debug (quote var) var) ...))
 
 (define-syntax-rule (debug tag form)
   (let ([res form])
     (display tag)
     (display ": ")
-    (display res)
-    (newline)
+    (pretty-display res)
     res))
 
 ;; functional version of `debugf!`
@@ -374,14 +391,14 @@
   (modulo x (+ 7 #e1e9)))
 
 ;; call `lc-mod` after operation `op`
-(define-syntax mod
+(define-syntax modop
   (syntax-rules ()
-    [(mod val)
+    [(_ val)
      val]
-    [(mod op val)
+    [(_ op val)
      val]
-    [(mod op val1 val2 rems ...)
-     (mod op (lc-mod (op val1 val2)) rems ...)]))
+    [(_ op val1 val2 rems ...)
+     (modop op (lc-mod (op val1 val2)) rems ...)]))
 
 ;; C like language syntax
 ;; for bitwise/array heavy program.
@@ -462,9 +479,9 @@
         [else '>]))
 
 ;; some function with same length name
-(define nth0 first)
-(define nth1 second)
-(define nth2 third)
+(define nth0 car)
+(define nth1 cadr)
+(define nth2 caddr)
 
 (define (∈ x set) (set-member? set x))
 (define (∉ x set) (not (set-member? set x)))
@@ -537,4 +554,52 @@
 (define (sort> lst)
   (sort lst >))
 
+;; O(2^n * n)
+;; example: (in-producer (subsetof lst #f) #f)
+(define (subsetof lst stop)
+  (let* ([bits 0]
+         [n (length lst)]
+         [subset-size (expt 2 n)])
+    (lambda ()
+      (match bits
+        [(== subset-size) stop]
+        [_ (define res
+             (for/list ([i n]
+                        [val lst]
+                        #:when (bitwise-bit-set? bits i))
+               val))
+           (set! bits (add1 bits))
+           res]))))
+
+(define (set->immutable s)
+  (list->set (set->list s)))
+
+(define (list2d-dims lstlst)
+  (match lstlst
+    ['()
+     (cons 0 0)]
+    [(cons fst _rems)
+     (cons (length lstlst) (length fst))]))
+
+;; faster group-by for sorted list (increasing/decreasing)
+(define (group-by-sorted key lst [same? equal?])
+  (match (length lst)
+    [0 '()]
+    [1 (list lst)]
+    [_ (reverse
+         (map reverse
+              (for/fold ([res '()])
+                        ([p lst]
+                         [v (cdr lst)])
+                (match* [res (same? (key p) (key v))]
+                  [('() #t)
+                   (list (list v p))]
+                  [('() #f)
+                   (list (list v) (list p))]
+                  [((cons fst rem) #t)
+                   (cons (cons v fst) rem)]
+                  [(res #f)
+                   (cons (list v) res)]))))]))
+
 (provide (all-defined-out))
+

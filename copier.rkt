@@ -82,6 +82,7 @@
   (define sorted-top-level-poses (make-skip-list))
 
   (for ([stx stxes])
+    
     (skip-list-set! sorted-top-level-poses (syntax-position stx) #t))
 
   (define (top-level-start-pos pos)

@@ -23,7 +23,7 @@ In this way, you can write code without manually write or copy code from your li
 * assert macro so you can place it somewhere to make sure your code are correct: `assert`
 * counter macro that hijack a function, and record the number of calls and return it when you need: `log-call-times!`
 * threading macro with placeholder `%`: `~>`
-* modulo macro that can modulo after any given operation: `mod`
+* modulo macro that can modulo after any given operation: `modop`
 * `C` macro that provide part of C like language experience, support nested infix expression, convenient bitwise operation operator, shorter assignment, send value to function chain in infix syntax.
 
 # Note

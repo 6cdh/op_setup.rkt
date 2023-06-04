@@ -1,6 +1,7 @@
 clipcopy () {
 	# xclip -in -selection clipboard < "${1:-/dev/stdin}"
-    wl-copy < $1
+    text=$(cat $1)
+    wl-copy "$text"
 }
 
 racket copier.rkt run.rkt > output.rkt
