@@ -1,0 +1,2 @@
+(define-syntax-parse-rule 1)
+(define-syntax-parser 1)

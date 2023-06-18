@@ -121,7 +121,7 @@
 (define (segtree-set! segtree key newv)
   (match-let ([(list tree n op) segtree])
     (aset! tree (+ key n) newv)
-    
+
     (let loop ([k (tree-father (+ key n))])
       (when (>= k 1)
         (aset! tree k
@@ -196,14 +196,14 @@
 (define (path-finding/dijkstra s t edgeof)
   (define dist (make-hash))
   (define prev (make-hash))
-  
+
   (define (build-path prev)
     (define (rec node path)
       (cond [(= node s) (cons s path)]
             [else (rec (hash-ref prev node) (cons node path))]))
-    
+
     (rec t '()))
-  
+
   (define (rec h)
     (match-define (cons d closest) (heap-min h))
     (heap-remove-min! h)
@@ -218,11 +218,11 @@
                (hash-set! dist to d1)
                (hash-set! prev to closest)
                (heap-add! h (cons d1 to))))
-           
+
            (if (zero? (heap-count h))
                #f
                (rec h))]))
-  
+
   (define h (make-heap (λ (a b) (<= (car a) (car b)))))
   (heap-add! h (cons 0 s))
   (rec h))
@@ -508,9 +508,9 @@
 
 (define (scanr proc init lst)
   (reverse
-   (for/list ([v (reverse lst)])
-     (set! init (proc v init))
-     init)))
+    (for/list ([v (reverse lst)])
+      (set! init (proc v init))
+      init)))
 
 (define (sublist lst from to)
   (drop (take lst to) from))
@@ -574,19 +574,19 @@
     [0 '()]
     [1 (list lst)]
     [_ (reverse
-        (map reverse
-             (for/fold ([res '()])
-                       ([p lst]
-                        [v (cdr lst)])
-               (match* [res (same? (key p) (key v))]
-                 [('() #t)
-                  (list (list v p))]
-                 [('() #f)
-                  (list (list v) (list p))]
-                 [((cons fst rem) #t)
-                  (cons (cons v fst) rem)]
-                 [(res #f)
-                  (cons (list v) res)]))))]))
+         (map reverse
+              (for/fold ([res '()])
+                        ([p lst]
+                         [v (cdr lst)])
+                (match* [res (same? (key p) (key v))]
+                  [('() #t)
+                   (list (list v p))]
+                  [('() #f)
+                   (list (list v) (list p))]
+                  [((cons fst rem) #t)
+                   (cons (cons v fst) rem)]
+                  [(res #f)
+                   (cons (list v) res)]))))]))
 
 (define-syntax-parse-rule (sort! lst:id less-than?:expr args:expr ...)
   (set! lst (sort lst less-than? args ...)))

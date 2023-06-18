@@ -124,11 +124,11 @@
       [_ (void)]))
 
   (string-join
-   (for*/list ([stx stxes]
-               [pos (in-value (syntax-position stx))]
-               #:when (marked? pos))
-     (substring code (sub1 pos) (+ pos -1 (syntax-span stx))))
-   "\n\n"))
+    (for*/list ([stx stxes]
+                [pos (in-value (syntax-position stx))]
+                #:when (marked? pos))
+      (substring code (sub1 pos) (+ pos -1 (syntax-span stx))))
+    "\n\n"))
 
 (let* ([lang-line (make-parameter #f)]
        [filename (command-line #:once-any
@@ -145,10 +145,10 @@
                           ""
                           "#lang racket\n"))])
   (displayln
-   (string-append
-    (string-trim
-     (for/fold ([replaced (string-append code "\n" copied-code)])
-               ([rep removed])
-       (string-replace replaced rep "")))
-    "\n")))
+    (string-append
+      (string-trim
+        (for/fold ([replaced (string-append code "\n" copied-code)])
+                  ([rep removed])
+          (string-replace replaced rep "")))
+      "\n")))
 
