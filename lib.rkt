@@ -251,13 +251,13 @@
 
 ;; replace recursive function `fn` with a new same function except it
 ;; print input/output
-(define-syntax-rule (debugf! fn)
+(define-syntax-parse-rule (debugf! fn:id)
   (set! fn (tracef (quote fn) fn)))
 
 ;; print a expr and its value
-(define-syntax-rule (debugv var ...)
+(define-syntax-rule (debugv expr ...)
   (let ()
-    (debug (quote var) var) ...))
+    (debug (quote expr) expr) ...))
 
 (define-syntax-rule (debug tag form)
   (let ([res form])
@@ -270,13 +270,18 @@
 (define (tracef tag fn)
   (let ([cnt 0])
     (lambda args
-      (let ([c cnt])
-        (displayln (format "~a [frame ~a] <- ~a" tag c args))
-        (set! cnt (add1 cnt))
-        (define res (apply fn args))
-        (set! cnt (sub1 cnt))
-        (displayln (format "~a [frame ~a] -> ~a" tag c res))
-        res))))
+      (define call-indent
+        (string-join
+         (append (make-list (max 0 (sub1 cnt)) "\u2502  ")
+                 (make-list (min 1 cnt) "\u251C\u2500\u2500"))
+         ""))
+      (define return-indent (string-append* (make-list cnt "\u2502  ")))
+      (displayln (format "~a~a~a" call-indent tag args))
+      (set! cnt (add1 cnt))
+      (define res (apply fn args))
+      (set! cnt (sub1 cnt))
+      (displayln (format "~a\u2514\u2500 ~a" return-indent res))
+      res)))
 
 ;; cache the function `fn`
 (define-syntax-parse-rule (cachef! fn:id args:expr ...)
@@ -330,7 +335,7 @@
     dispatch))
 
 ;; replace `fn` with its `log-call-times` version
-(define (log-call-times! fn)
+(define-syntax-rule (log-call-times! fn)
   (set! fn (log-call-times fn)))
 
 ;; assert invariant
@@ -508,9 +513,9 @@
 
 (define (scanr proc init lst)
   (reverse
-    (for/list ([v (reverse lst)])
-      (set! init (proc v init))
-      init)))
+   (for/list ([v (reverse lst)])
+     (set! init (proc v init))
+     init)))
 
 (define (sublist lst from to)
   (drop (take lst to) from))
@@ -574,19 +579,19 @@
     [0 '()]
     [1 (list lst)]
     [_ (reverse
-         (map reverse
-              (for/fold ([res '()])
-                        ([p lst]
-                         [v (cdr lst)])
-                (match* [res (same? (key p) (key v))]
-                  [('() #t)
-                   (list (list v p))]
-                  [('() #f)
-                   (list (list v) (list p))]
-                  [((cons fst rem) #t)
-                   (cons (cons v fst) rem)]
-                  [(res #f)
-                   (cons (list v) res)]))))]))
+        (map reverse
+             (for/fold ([res '()])
+                       ([p lst]
+                        [v (cdr lst)])
+               (match* [res (same? (key p) (key v))]
+                 [('() #t)
+                  (list (list v p))]
+                 [('() #f)
+                  (list (list v) (list p))]
+                 [((cons fst rem) #t)
+                  (cons (cons v fst) rem)]
+                 [(res #f)
+                  (cons (list v) res)]))))]))
 
 (define-syntax-parse-rule (sort! lst:id less-than?:expr args:expr ...)
   (set! lst (sort lst less-than? args ...)))
