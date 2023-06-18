@@ -16,7 +16,8 @@
 
 (require data/heap)
 (require data/skip-list)
-(require (for-syntax syntax/parse))
+(require syntax/parse)
+(require syntax/parse/define)
 (require racket/sandbox)
 
 ;; array utils
@@ -120,7 +121,7 @@
 (define (segtree-set! segtree key newv)
   (match-let ([(list tree n op) segtree])
     (aset! tree (+ key n) newv)
-
+    
     (let loop ([k (tree-father (+ key n))])
       (when (>= k 1)
         (aset! tree k
@@ -195,14 +196,14 @@
 (define (path-finding/dijkstra s t edgeof)
   (define dist (make-hash))
   (define prev (make-hash))
-
+  
   (define (build-path prev)
     (define (rec node path)
       (cond [(= node s) (cons s path)]
             [else (rec (hash-ref prev node) (cons node path))]))
-
+    
     (rec t '()))
-
+  
   (define (rec h)
     (match-define (cons d closest) (heap-min h))
     (heap-remove-min! h)
@@ -217,11 +218,11 @@
                (hash-set! dist to d1)
                (hash-set! prev to closest)
                (heap-add! h (cons d1 to))))
-
+           
            (if (zero? (heap-count h))
                #f
                (rec h))]))
-
+  
   (define h (make-heap (λ (a b) (<= (car a) (car b)))))
   (heap-add! h (cons 0 s))
   (rec h))
@@ -278,8 +279,23 @@
         res))))
 
 ;; cache the function `fn`
-(define-syntax-rule (cachef! fn)
-  (set! fn (cachef-hash fn)))
+(define-syntax-parse-rule (cachef! fn:id args:expr ...)
+  (set! fn (cachef fn args ...)))
+
+(define-syntax-parser cachef
+  [(_ fn:id)
+   #'(cachef-hash fn)]
+  [(_ fn:id hint1:expr hints:expr ... init)
+   (with-syntax ([(args ...) (generate-temporaries #'(hint1 hints ...))]
+                 [(base ...) #'(hints ... 1)])
+     #'(let* ([args->integer (lambda (args ...) (+ (* base args) ...))]
+              [cache (make-vector (* hint1 hints ...) init)]
+              [ori-fn fn])
+         (lambda (args ...)
+           (define key (args->integer args ...))
+           (when (= init (vector-ref cache key))
+             (vector-set! cache key (ori-fn args ...)))
+           (vector-ref cache key))))])
 
 ;; return a hash table cached version of function `fn`
 (define (cachef-hash fn)
@@ -288,30 +304,6 @@
       (when (not (hash-has-key? cache args))
         (hash-set! cache args (apply fn args)))
       (hash-ref cache args))))
-
-;; return a 3d array cached version of function `fn`
-(define (cachef-vec3 fn vec)
-  (let ([init (aref vec 0 0 0)])
-    (lambda (x y z)
-      (when (= init (aref vec x y z))
-        (aset! vec x y z (fn x y z)))
-      (aref vec x y z))))
-
-;; return a 2d array cached version of function `fn`
-(define (cachef-vec2 fn vec)
-  (let ([init (aref vec 0 0)])
-    (lambda (x y)
-      (when (= init (aref vec x y))
-        (aset! vec x y (fn x y)))
-      (aref vec x y))))
-
-;; return a 1d array cached version of function `fn`
-(define (cachef-vec fn vec)
-  (let ([init (aref vec 0)])
-    (lambda (x)
-      (when (= init (aref vec x))
-        (aset! vec x (fn x)))
-      (aref vec x))))
 
 ;; (timeout time expr)
 ;; limit the expr runs complete in `time` seconds
@@ -378,27 +370,22 @@
 
 ;; threading macro
 ;; `%` as placeholder
-(define-syntax (~> stx)
-  (syntax-parse stx
-                #:datum-literals (%)
-                [(_ v)
-                 #'v]
-                [(_ v (fn args1 ... % args2 ...) rems ...)
-                 #'(~> (fn args1 ... v args2 ...) rems ...)]))
+(define-syntax-parser ~>
+  #:datum-literals (%)
+  [(_ v)
+   #'v]
+  [(_ v (fn args1 ... % args2 ...) rems ...)
+   #'(~> (fn args1 ... v args2 ...) rems ...)])
 
 ;; leetcode modulo
-(define (lc-mod x)
+(define (lc-mod-fn x)
   (modulo x (+ 7 #e1e9)))
 
-;; call `lc-mod` after operation `op`
-(define-syntax modop
-  (syntax-rules ()
-    [(_ val)
-     val]
-    [(_ op val)
-     val]
-    [(_ op val1 val2 rems ...)
-     (modop op (lc-mod (op val1 val2)) rems ...)]))
+(define-syntax-parser lc-mod
+  [(_ v)
+   #'(lc-mod-fn v)]
+  [(_ op args ...)
+   #'(lc-mod (op (lc-mod args) ...))])
 
 ;; C like language syntax
 ;; for bitwise/array heavy program.
@@ -521,9 +508,9 @@
 
 (define (scanr proc init lst)
   (reverse
-    (for/list ([v (reverse lst)])
-      (set! init (proc v init))
-      init)))
+   (for/list ([v (reverse lst)])
+     (set! init (proc v init))
+     init)))
 
 (define (sublist lst from to)
   (drop (take lst to) from))
@@ -587,19 +574,40 @@
     [0 '()]
     [1 (list lst)]
     [_ (reverse
-         (map reverse
-              (for/fold ([res '()])
-                        ([p lst]
-                         [v (cdr lst)])
-                (match* [res (same? (key p) (key v))]
-                  [('() #t)
-                   (list (list v p))]
-                  [('() #f)
-                   (list (list v) (list p))]
-                  [((cons fst rem) #t)
-                   (cons (cons v fst) rem)]
-                  [(res #f)
-                   (cons (list v) res)]))))]))
+        (map reverse
+             (for/fold ([res '()])
+                       ([p lst]
+                        [v (cdr lst)])
+               (match* [res (same? (key p) (key v))]
+                 [('() #t)
+                  (list (list v p))]
+                 [('() #f)
+                  (list (list v) (list p))]
+                 [((cons fst rem) #t)
+                  (cons (cons v fst) rem)]
+                 [(res #f)
+                  (cons (list v) res)]))))]))
+
+(define-syntax-parse-rule (sort! lst:id less-than?:expr args:expr ...)
+  (set! lst (sort lst less-than? args ...)))
+
+(define (list->binary lst)
+  (for/sum ([v lst]
+            [i (in-naturals 0)])
+    (* v (expt 2 i))))
+
+;; Return O(n^2) pairs of n length list
+(define (pairs lst)
+  (let loop ([prev '()]
+             [lst lst]
+             [result '()])
+    (match* [prev lst]
+      [(_ '()) result]
+      [('() (cons cur rem))
+       (loop (cons cur prev) rem result)]
+      [(prev (cons cur rem))
+       (loop (cons cur prev) rem
+             (append (map (λ (p) (cons p cur)) prev) result))])))
 
 (provide (all-defined-out))
 

@@ -23,6 +23,11 @@
       (define obj (list 'syncheck:add-definition-target start id))
       (set! cont (cons obj cont)))
 
+    (define/override (syncheck:add-jump-to-definition obj start end
+                                                      id filename submods)
+      (define obj (list 'jump-to-definition start end id))
+      (set! cont (cons obj cont)))
+
     (define/override (syncheck:add-arrow _obj1
                                          def-left _def-right
                                          _obj2
@@ -59,9 +64,7 @@
     (match c
       [(list 'syncheck:add-mouse-over-status start end str)
        (when (string=? str (format "imported from ~v" *lib*))
-         (set-add! need-copy-syms
-                   (string->symbol
-                    (substring code start end))))]
+         (set-add! need-copy-syms (string->symbol (substring code start end))))]
       [_ (void)]))
   need-copy-syms)
 
@@ -82,8 +85,7 @@
   (define sorted-top-level-poses (make-skip-list))
 
   (for ([stx stxes])
-    
-    (skip-list-set! sorted-top-level-poses (syntax-position stx) #t))
+    (skip-list-set! sorted-top-level-poses (sub1 (syntax-position stx)) #t))
 
   (define (top-level-start-pos pos)
     (define it (skip-list-iterate-greatest/<=? sorted-top-level-poses pos))
