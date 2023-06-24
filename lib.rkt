@@ -311,17 +311,18 @@
 (define-syntax-parser cachef
   [(_ fn:id)
    #'(cachef-hash fn)]
-  [(_ fn:id hint1:expr hints:expr ... init)
-   (with-syntax ([(args ...) (generate-temporaries #'(hint1 hints ...))]
-                 [(base ...) #'(hints ... 1)])
-     #'(let* ([args->integer (lambda (args ...) (+ (* base args) ...))]
-              [cache (make-vector (* hint1 hints ...) init)]
+  [(_ fn:id hints:expr ... init)
+   (with-syntax ([(args ...) (generate-temporaries #'(hints ...))])
+     #'(let* ([cache (make-array hints ... init)]
               [ori-fn fn])
          (lambda (args ...)
-           (define key (args->integer args ...))
-           (when (= init (vector-ref cache key))
-             (vector-set! cache key (ori-fn args ...)))
-           (vector-ref cache key))))])
+           (cond [(or (< args 0) ...
+                      (>= args hints) ...)
+                  (ori-fn args ...)]
+                 [else
+                  (when (= init (aref cache args ...))
+                    (aset! cache args ... (ori-fn args ...)))
+                  (aref cache args ...)]))))])
 
 ;; return a hash table cached version of function `fn`
 (define (cachef-hash fn)
@@ -412,7 +413,7 @@
 
 ;; mod for nested expression
 ;; example:
-;; (lc-mod (+ (* #e1e9 #e1e8) (+ #e1e6 #e1e6)))
+;; (lc-mod + (* #e1e9 #e1e8) (+ #e1e6 #e1e6))
 (define-syntax-parser lc-mod
   [(_ v)
    #'(lc-mod-fn v)]
@@ -477,6 +478,18 @@
    #'(C1 (vector-ref arr (C idx ...)) then ...)]
   [(_ a op b then ...)
    #'(C1 (op a (C b)) then ...)])
+
+;; for
+
+(define-syntax-rule (for/max init-minimum-value args ... last-expr)
+  (for/fold ([maxv init-minimum-value])
+            args ...
+    (max maxv last-expr)))
+
+(define-syntax-rule (for/min init-maximum-value args ... last-expr)
+  (for/fold ([mini init-maximum-value])
+            args ...
+    (min mini last-expr)))
 
 ;; other functions
 
