@@ -12,6 +12,10 @@
 ;; * syntax
 ;; * other functions
 
+;; performance note:
+;; * use pair instead of 2 element list
+;; * use (cons x y) not (list x y ...) in pattern match
+
 ;; requires
 
 (require data/heap)
@@ -23,6 +27,7 @@
 ;; array utils
 
 ;; make a multi-dimension array
+;; (make-array dims ... init-value)
 (define-syntax make-array
   (syntax-rules ()
     [(_ n init)
@@ -31,6 +36,7 @@
      (build-vector n (lambda _ (make-array args ...)))]))
 
 ;; array-ref
+;; (aref array dims ...)
 (define-syntax aref
   (syntax-rules ()
     [(_ arr) arr]
@@ -38,6 +44,7 @@
      (aref (vector-ref arr i) args ...)]))
 
 ;; array-set!
+;; (aset! array dims ... new-value)
 (define-syntax aset!
   (syntax-rules ()
     [(_ arr i v)
@@ -46,10 +53,13 @@
      (aset! (vector-ref arr i) args ... v)]))
 
 ;; array-update!
+;; (aupd! array dims ... updater)
+;; updater : x -> x
 (define-syntax-rule (aupd! arr dims ... fn)
   (aset! arr dims ... (fn (aref arr dims ...))))
 
 ;; array-swap!
+;; (aswap! array (dims1 ...) (dims2 ...))
 (define-syntax-rule (aswap! arr (index1 ...) (index2 ...))
   (let ([t (aref arr index1 ...)])
     (aset! arr index1 ... (aref arr index2 ...))
@@ -87,6 +97,7 @@
            sum])))
 
 ;; array representation of tree ;;
+;; the root is 1
 
 (define (tree-father k)
   (quotient k 2))
@@ -130,6 +141,7 @@
 
 ;; disjoint set
 
+;; make disjoint set of (range 0 n)
 (define (make-dsu n)
   (build-vector n values))
 
@@ -148,7 +160,7 @@
 
 ;; range-sum : (listof number) -> procedure
 ;; return a procedure that calculates (sum (sublist arr (range i j)))
-;;
+
 ;; O(n) where n is the length of `arr`
 ;; the result function runs in O(1)
 (define (range-sum arr)
@@ -188,8 +200,8 @@
         [else (bsearch-least (add1 m) r op)]))
 
 ;; dijkstra algorithm
-;; path-finding/dijkstra : (node, node, edgeof) -> (list path cost)
-;; edgeof : node -> (listof (list node cost))
+;; path-finding/dijkstra : (node, node, edgeof) -> (cons path cost)
+;; edgeof : node -> (listof (cons node cost))
 ;; path : (listof node)
 ;; cost : number
 ;; node : any
@@ -249,12 +261,7 @@
   (do () ((not condition))
     body ...))
 
-;; replace recursive function `fn` with a new same function except it
-;; print input/output
-(define-syntax-parse-rule (debugf! fn:id)
-  (set! fn (tracef (quote fn) fn)))
-
-;; print a expr and its value
+;; print expr and their value
 (define-syntax-rule (debugv expr ...)
   (let ()
     (debug (quote expr) expr) ...))
@@ -265,6 +272,11 @@
     (display ": ")
     (pretty-display res)
     res))
+
+;; replace recursive function `fn` with a new same function except it
+;; print input/output
+(define-syntax-parse-rule (debugf! fn:id)
+  (set! fn (tracef (quote fn) fn)))
 
 ;; functional version of `debugf!`
 (define (tracef tag fn)
@@ -284,6 +296,15 @@
       res)))
 
 ;; cache the function `fn`
+;; (cachef! function-name)
+;; It use a hashtable for cache.
+
+;; The second usage is
+;; (cachef! function-name dims ... not-exist-value)
+;; Then it would use vector for cache.
+;; dims are number or expression that evaluate to number
+;; not-exist-value is the value that indicate that the
+;; key-value pair is not exist.
 (define-syntax-parse-rule (cachef! fn:id args:expr ...)
   (set! fn (cachef fn args ...)))
 
@@ -312,12 +333,18 @@
 
 ;; (timeout time expr)
 ;; limit the expr runs complete in `time` seconds
+;; or
+;; (timeout expr)
 (define-syntax timeout
   (syntax-rules ()
     [(_ form)
      (with-limits 1 10 (time form))]
     [(_ t form)
      (with-limits t 10 (time form))]))
+
+;; replace `fn` with its `log-call-times` version
+(define-syntax-rule (log-call-times! fn)
+  (set! fn (log-call-times fn)))
 
 ;; return a new function that same with `fn`,
 ;; but record the number of calls, and can obtain
@@ -333,10 +360,6 @@
         ['query cnt]
         [_ (apply call method args)]))
     dispatch))
-
-;; replace `fn` with its `log-call-times` version
-(define-syntax-rule (log-call-times! fn)
-  (set! fn (log-call-times fn)))
 
 ;; assert invariant
 (define (assert cond . msg)
@@ -375,6 +398,7 @@
 
 ;; threading macro
 ;; `%` as placeholder
+;; example:
 (define-syntax-parser ~>
   #:datum-literals (%)
   [(_ v)
@@ -386,6 +410,9 @@
 (define (lc-mod-fn x)
   (modulo x (+ 7 #e1e9)))
 
+;; mod for nested expression
+;; example:
+;; (lc-mod (+ (* #e1e9 #e1e8) (+ #e1e6 #e1e6)))
 (define-syntax-parser lc-mod
   [(_ v)
    #'(lc-mod-fn v)]
@@ -395,52 +422,65 @@
 ;; C like language syntax
 ;; for bitwise/array heavy program.
 ;; it also provide nested infix expr
-;; for example, `(C ((1 + 1) + 2))`
-(define-syntax C
-  (syntax-rules ()
-    [(_ (expr ...) then ...)
-     (C1 (C expr ...) then ...)]
-    [(_ expr ...)
-     (C1 expr ...)]))
+;; example:
+;; (C x := 1) ; (define x 1)
+;; (C (1 + 1) + 2)
+;; (C array [dim1] [dim2])
+;; (C array [dim1] [dim2] = new-value)
+;; (C x = new-value) ; assignment
+;; special infix operator:
+;; % : modulo
+;; shl : arithmetic-shift
+;; ~ : bitwise-not
+;; & : bitwise-and
+;; OR : bitwise-ior
+;; ^ : bitwise-xor
+;; other function fallback to Racket function, for example,
+;; (C 1 / 2)
+(define-syntax-parser C
+  [(_ (expr ...) then ...)
+   #'(C1 (C expr ...) then ...)]
+  [(_ expr ...)
+   #'(C1 expr ...)])
 
 ;; like `C` but the first argument would not be expanded
 ;; should not be used externally
-(define-syntax C1
-  (syntax-rules (= - % shl ~ & OR ^ << >>)
-    [(_ v)
-     v]
-    [(_ ident = expr ...)
-     (set! ident (C1 expr ...))]
-    [(_ - a)
-     (- a)]
-    [(_ a - b then ...)
-     (C1 (- a (C b)) then ...)]
-    [(_ a % b then ...)
-     (C1 (modulo a (C b)) then ...)]
-    [(_ a shl b then ...)
-     (C1 (arithmetic-shift a (C b)) then ...)]
-    [(_ ~ a then ...)
-     (C1 (bitwise-not (C a)) then ...)]
-    [(_ a & b then ...)
-     (C1 (bitwise-and a (C b)) then ...)]
-    [(_ a OR b then ...)
-     (C1 (bitwise-ior a (C b)) then ...)]
-    [(_ a ^ b then ...)
-     (C1 (bitwise-xor a (C b)) then ...)]
-    [(_ a [idx ...] = expr ...)
-     (vector-set! a (C idx ...) (C expr ...))]
-    [(_ a [idx ...] then ...)
-     (C1 (vector-ref a (C idx ...)) then ...)]
-    [(_ a << b then ...)
-     (C1 (a (C b)) then ...)]
-    [(_ a >> b then ...)
-     (C1 (b a) then ...)]
-    [(_ a op b then ...)
-     (C1 (op a (C b)) then ...)]))
+(define-syntax-parser C1
+  #:datum-literals (:= = - % shl ~ & OR ^ $)
+  [(_ result)
+   #'result]
+  [(_ ident:id := expr ...)
+   #'(define ident (C expr ...))]
+  [(_ ident:id = expr ...)
+   #'(set! ident (C expr ...))]
+  [(_ - a)
+   #'(- a)]
+  [(_ ($ expr ...))
+   #'(expr ...)]
+  [(_ a - b then ...)
+   #'(C1 (- a (C b)) then ...)]
+  [(_ a % b then ...)
+   #'(C1 (modulo a (C b)) then ...)]
+  [(_ a shl b then ...)
+   #'(C1 (arithmetic-shift a (C b)) then ...)]
+  [(_ ~ a then ...)
+   #'(C1 (bitwise-not (C a)) then ...)]
+  [(_ a & b then ...)
+   #'(C1 (bitwise-and a (C b)) then ...)]
+  [(_ a OR b then ...)
+   #'(C1 (bitwise-ior a (C b)) then ...)]
+  [(_ a ^ b then ...)
+   #'(C1 (bitwise-xor a (C b)) then ...)]
+  [(_ arr:id [idx ...] = expr ...)
+   #'(vector-set! arr (C idx ...) (C expr ...))]
+  [(_ arr:id [idx ...] then ...)
+   #'(C1 (vector-ref arr (C idx ...)) then ...)]
+  [(_ a op b then ...)
+   #'(C1 (op a (C b)) then ...)])
 
 ;; other functions
 
-;; convert (vectorof (vectorof any)) to (listof (listof any))
+;; convert (vectorof (vectorof x)) to (listof (listof x))
 (define (vector2d->list2d mat)
   (map vector->list (vector->list mat)))
 
@@ -596,6 +636,8 @@
 (define-syntax-parse-rule (sort! lst:id less-than?:expr args:expr ...)
   (set! lst (sort lst less-than? args ...)))
 
+;; list->binary : binary-list -> integer
+;; binary-list : a list of number 0 or 1
 (define (list->binary lst)
   (for/sum ([v lst]
             [i (in-naturals 0)])
