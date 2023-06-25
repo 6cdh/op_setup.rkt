@@ -2,17 +2,31 @@ Here is a setup for competitive/online programming for Racket that I use mainly 
 
 It aims to provide a workflow, not a lot of common used algorithms or data structures library though there are some common functions I prefer in `lib.rkt`.
 
-# Workflows
+## Workflow
 
-1. You have your own style library `lib.rkt`.
-2. Import `lib.rkt` in `run.rkt`, write code and test as usual.
-3. Run `copy.sh` to copy your code from `run.rkt` and only necessary code from `lib.rkt` to the clipboard.
+1. You have your own style library in `lib.rkt`.
+2. In `run.rkt`, require `lib.rkt`. Then write code and test your code as usual.
+3. Run `copy.sh` to copy your code from `run.rkt` and only the necessary code from `lib.rkt` to `output.rkt`. Then it will be copied to your clipboard.
 4. Paste your code into the browser.
-5. Remove test code from the copied code if there are some.
+5. If there is any test code in the copied code, remove it.
 
 In this way, you can write code without manually write or copy code from your library or share code with a lot of boilerplate code.
 
-# Library
+## Requirements
+
+* Racket
+* A tool for copying to the clipboard
+  * wl-clipboard on Wayland
+  * xclip on X11
+
+Other platforms are not supported because I don't use them and can't test it. Feel free to open a issue if you have suggestion for other platforms.
+
+# Note
+
+* Your code must be correct in order to be copied otherwise the script will complain when analyze the dependency of your code.
+* By default, `#lang racket` is not copied. Use the `--langline` flag with `copier.rkt` to include it.
+
+## Library
 
 `lib.rkt` contains functions that some of them may attract you use Racket (or a lisp) on online programming platform:
 
@@ -24,13 +38,5 @@ In this way, you can write code without manually write or copy code from your li
 * counter macro that hijack a function, and record the number of calls and return it when you need: `log-call-times!`
 * threading macro with placeholder `%`: `~>`
 * modulo macro that modulo nested expression: `lc-mod`
-* `C` macro that provide part of C like language experience, support nested infix expression, convenient bitwise operation operator, shorter assignment, send value to function chain in infix syntax.
-
-# Note
-
-* Your code should be correct to be copied otherwise the script will complain when analyze the dependency of your code.
-* `copier.rkt` copies a file whose name is given from the command line and print code to stdout.
-* By default, `#lang racket` is not copied. Use the `--langline` flag with `copier.rkt` to include it.
-* By default, `copy.sh` copy code to clipboard under Wayland, write your own code if you are under X11 or other platform.
-* modify or add your own functions to `lib.rkt`.
+* `C` macro that provide part of C like language experience, support nested infix expression, convenient bitwise operation operator, C style assignment.
 
