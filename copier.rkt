@@ -6,6 +6,12 @@
 
 (define *lib* "lib.rkt")
 
+;; NOTE
+;; drracket use position in bytes
+;; syntax-position use position in string
+;; they are not same thing becauseof unicode character
+;; we use bytes position here
+
 (define info-collector%
   (class (annotations-mixin object%)
     (super-new)
@@ -47,7 +53,7 @@
   (define info-collector (new info-collector%))
   (parameterize ([current-annotations info-collector]
                  [current-namespace base-ns])
-    (define in (open-input-string text))
+    (define in (open-input-bytes text))
     (add-syntax (expand (with-module-reading-parameterization
                           (lambda () (read-syntax "str" in)))))
     (done))
@@ -55,7 +61,7 @@
   (send info-collector get-cont))
 
 (define (find-used-syms filename)
-  (define code (file->string filename))
+  (define code (file->bytes filename))
 
   (define need-copy-syms (mutable-set))
   (define cont (analyze code))
@@ -64,20 +70,33 @@
     (match c
       [(list 'syncheck:add-mouse-over-status start end str)
        (when (string=? str (format "imported from ~v" *lib*))
-         (set-add! need-copy-syms (string->symbol (substring code start end))))]
+         (set-add! need-copy-syms (string->symbol
+                                   (bytes->string/utf-8
+                                    (subbytes code start end)))))]
       [_ (void)]))
   need-copy-syms)
 
 (define (copy-used syms lib)
   (define (read-top-level-defs code)
-    (define port (open-input-string code))
+    (define port (open-input-bytes code))
     ;; make syntax-position counts in string
     (port-count-lines! port)
     (parameterize ([current-input-port port])
       (read-language)
       (port->list read-syntax)))
 
-  (define code (file->string lib))
+  (define code (file->bytes lib))
+  (define code-string (file->string lib))
+
+  (define string-pos->bytes-pos
+    (let ([chars-before 0])
+      (define vec
+        (for/vector ([c code-string])
+          (begin0
+            chars-before
+            (set! chars-before (+ chars-before (char-utf-8-length c))))))
+      (lambda (pos) (vector-ref vec pos))))
+
   (define stxes (read-top-level-defs code))
   (define cont (analyze code))
 
@@ -85,7 +104,9 @@
   (define sorted-top-level-poses (make-skip-list))
 
   (for ([stx stxes])
-    (skip-list-set! sorted-top-level-poses (sub1 (syntax-position stx)) #t))
+    (skip-list-set! sorted-top-level-poses
+                    (string-pos->bytes-pos (sub1 (syntax-position stx)))
+                    #t))
 
   (define (top-level-start-pos pos)
     (define it (skip-list-iterate-greatest/<=? sorted-top-level-poses pos))
@@ -124,11 +145,12 @@
       [_ (void)]))
 
   (string-join
-    (for*/list ([stx stxes]
-                [pos (in-value (syntax-position stx))]
-                #:when (marked? pos))
-      (substring code (sub1 pos) (+ pos -1 (syntax-span stx))))
-    "\n\n"))
+   (for*/list ([stx stxes]
+               [pos (in-value (string-pos->bytes-pos (sub1 (syntax-position stx))))]
+               #:when (marked? pos))
+     (define str-pos (sub1 (syntax-position stx)))
+     (substring code-string str-pos (+ str-pos (syntax-span stx))))
+   "\n\n"))
 
 (let* ([lang-line (make-parameter #f)]
        [filename (command-line #:once-any
@@ -145,10 +167,10 @@
                           ""
                           "#lang racket\n"))])
   (displayln
-    (string-append
-      (string-trim
-        (for/fold ([replaced (string-append code "\n" copied-code)])
-                  ([rep removed])
-          (string-replace replaced rep "")))
-      "\n")))
+   (string-append
+    (string-trim
+     (for/fold ([replaced (string-append code "\n" copied-code)])
+               ([rep removed])
+       (string-replace replaced rep "")))
+    "\n")))
 

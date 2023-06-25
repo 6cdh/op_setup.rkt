@@ -669,5 +669,13 @@
        (loop (cons cur prev) rem
              (append (map (λ (p) (cons p cur)) prev) result))])))
 
+(define (counter-add! cter val)
+  (hash-update! cter val add1 0))
+
+(define (counter-remove! cter val)
+  (hash-update! cter val sub1)
+  (when (= 0 (hash-ref cter val))
+    (hash-remove! cter val)))
+
 (provide (all-defined-out))
 
