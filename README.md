@@ -21,7 +21,7 @@ In this way, you can write code without manually write or copy code from your li
 
 Other platforms are not supported because I don't use them and can't test it. Feel free to open a issue if you have suggestion for other platforms.
 
-# Note
+## Note
 
 * Your code must be correct in order to be copied otherwise the script will complain when analyze the dependency of your code.
 * By default, `#lang racket` is not copied. Use the `--langline` flag with `copier.rkt` to include it.
