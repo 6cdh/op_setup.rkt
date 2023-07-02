@@ -7,6 +7,7 @@
 ;; * array representation of tree
 ;; * segment tree
 ;; * disjoint set
+;; * static BST
 ;; * algorithms
 ;; * data structure helpers
 ;; * syntax
@@ -23,6 +24,7 @@
 (require syntax/parse)
 (require syntax/parse/define)
 (require racket/sandbox)
+(require racket/unsafe/ops)
 
 ;; array utils
 
@@ -64,6 +66,17 @@
   (let ([t (aref arr index1 ...)])
     (aset! arr index1 ... (aref arr index2 ...))
     (aset! arr index2 ... t)))
+
+(define-syntax-rule (alen arr)
+  (vector-length arr))
+
+;; string
+
+(define-syntax-rule (sref str i)
+  (string-ref str i))
+
+(define-syntax-rule (slen str)
+  (string-length str))
 
 ;; fenwick tree
 
@@ -155,6 +168,54 @@
 
 (define (dsu-union! dsu a b)
   (aset! dsu (dsu-rootof dsu a) (dsu-rootof dsu b)))
+
+;; static BST
+
+;; Binary Search Tree on a predefined sorted vector
+
+(struct SBST
+  (keys vals none))
+
+(define (make-sbst lst none)
+  (define keys (list->vector lst))
+  (SBST keys (make-vector (unsafe-vector-length keys) none) none))
+
+(define (sbst-search-index sbst key)
+  (define keys (SBST-keys sbst))
+  (define n (unsafe-vector-length keys))
+  (let loop ([l 0]
+             [r n])
+    (define mid (unsafe-fxquotient (unsafe-fx+ l r) 2))
+    (cond [(unsafe-fx= l r) l]
+          [(unsafe-fx<= key (unsafe-vector-ref keys mid)) (loop l mid)]
+          [else (loop (unsafe-fx+ 1 mid) r)])))
+
+(define (sbst-ref sbst key default)
+  (define index (sbst-search-index sbst key))
+  (define vals (SBST-vals sbst))
+  (if (or (unsafe-fx>= index (unsafe-vector-length vals))
+          (equal? (unsafe-vector-ref vals index) (SBST-none sbst)))
+      default
+      (unsafe-vector-ref vals index)))
+
+(define (sbst-set! sbst key new-val)
+  (unsafe-vector-set! (SBST-vals sbst) (sbst-search-index sbst key) new-val))
+
+(define (sbst-update! sbst key updater default)
+  (sbst-set! sbst key (updater (sbst-ref sbst key default))))
+
+(define (sbst-iter sbst key)
+  (sbst-search-index sbst key))
+
+(define (sbst-iter-next sbst it)
+  (if (= (unsafe-fx+ 1 it) (unsafe-vector-length (SBST-keys sbst)))
+      #f
+      (unsafe-fx+ 1 it)))
+
+(define (sbst-iter-prev sbst it)
+  (if (= -1 (unsafe-fx- it 1))
+      #f
+      (unsafe-fx- it 1)))
 
 ;; algorithms
 
@@ -320,7 +381,7 @@
                       (>= args hints) ...)
                   (ori-fn args ...)]
                  [else
-                  (when (= init (aref cache args ...))
+                  (when (equal? init (aref cache args ...))
                     (aset! cache args ... (ori-fn args ...)))
                   (aref cache args ...)]))))])
 
@@ -491,6 +552,19 @@
             args ...
     (min mini last-expr)))
 
+(define-syntax-parse-rule (upd! var:id updater)
+  (set! var (updater var)))
+
+(define-syntax-parse-rule (vec! var:id ...)
+  (let ()
+    (vec1! var) ...))
+
+(define-syntax-parse-rule (vec1! var:id)
+  (set! var
+        (cond [(string? var) (list->vector (string->list var))]
+              [(list? var) (list->vector var)]
+              [else var])))
+
 ;; other functions
 
 ;; convert (vectorof (vectorof x)) to (listof (listof x))
@@ -646,7 +720,7 @@
                  [(res #f)
                   (cons (list v) res)]))))]))
 
-(define-syntax-parse-rule (sort! lst:id less-than?:expr args:expr ...)
+(define-syntax-parse-rule (sort! lst:id less-than?:expr args ...)
   (set! lst (sort lst less-than? args ...)))
 
 ;; list->binary : binary-list -> integer
@@ -676,6 +750,13 @@
   (hash-update! cter val sub1)
   (when (= 0 (hash-ref cter val))
     (hash-remove! cter val)))
+
+(define (string-reverse str)
+  (list->string (reverse (string->list str))))
+
+(define (bitcount x)
+  (for/sum ([i 64])
+    (if (bitwise-bit-set? x i) 1 0)))
 
 (provide (all-defined-out))
 
