@@ -6,20 +6,17 @@
 
 (define *lib* "lib.rkt")
 
-;; NOTE
-;; drracket use position in bytes
-;; syntax-position use position in string
-;; they are not same thing becauseof unicode character
-;; we use bytes position here
-
 (define info-collector%
   (class (annotations-mixin object%)
+    (init-field src)
     (super-new)
 
     (define cont '())
 
     (define/override (syncheck:find-source-object stx)
-      stx)
+      (if (equal? (syntax-source stx) src)
+          stx
+          #f))
 
     (define/override (syncheck:add-mouse-over-status obj start end str)
       (define obj (list 'syncheck:add-mouse-over-status start end str))
@@ -50,18 +47,21 @@
   (define base-ns (make-base-namespace))
   (define-values (add-syntax done)
     (make-traversal base-ns #f))
-  (define info-collector (new info-collector%))
+  (define src 'current-file)
+  (define info-collector (new info-collector% [src src]))
+  (define in (open-input-string text))
+  (port-count-lines! in)
   (parameterize ([current-annotations info-collector]
                  [current-namespace base-ns])
-    (define in (open-input-bytes text))
-    (add-syntax (expand (with-module-reading-parameterization
-                          (lambda () (read-syntax "str" in)))))
+    (define expanded (expand (with-module-reading-parameterization
+                               (lambda () (read-syntax src in)))))
+    (add-syntax expanded)
     (done))
 
   (send info-collector get-cont))
 
 (define (find-used-syms filename)
-  (define code (file->bytes filename))
+  (define code (file->string filename))
 
   (define need-copy-syms (mutable-set))
   (define cont (analyze code))
@@ -70,32 +70,21 @@
     (match c
       [(list 'syncheck:add-mouse-over-status start end str)
        (when (string=? str (format "imported from ~v" *lib*))
-         (set-add! need-copy-syms (string->symbol
-                                   (bytes->string/utf-8
-                                    (subbytes code start end)))))]
+         (set-add! need-copy-syms
+                   (string->symbol (substring code start end))))]
       [_ (void)]))
   need-copy-syms)
 
-(define (copy-used syms lib)
+(define (copy-used need-copy-syms lib)
   (define (read-top-level-defs code)
-    (define port (open-input-bytes code))
+    (define port (open-input-string code))
     ;; make syntax-position counts in string
     (port-count-lines! port)
     (parameterize ([current-input-port port])
       (read-language)
       (port->list read-syntax)))
 
-  (define code (file->bytes lib))
-  (define code-string (file->string lib))
-
-  (define string-pos->bytes-pos
-    (let ([chars-before 0])
-      (define vec
-        (for/vector ([c code-string])
-          (begin0
-            chars-before
-            (set! chars-before (+ chars-before (char-utf-8-length c))))))
-      (lambda (pos) (vector-ref vec pos))))
+  (define code (file->string lib))
 
   (define stxes (read-top-level-defs code))
   (define cont (analyze code))
@@ -105,7 +94,7 @@
 
   (for ([stx stxes])
     (skip-list-set! sorted-top-level-poses
-                    (string-pos->bytes-pos (sub1 (syntax-position stx)))
+                    (sub1 (syntax-position stx))
                     #t))
 
   (define (top-level-start-pos pos)
@@ -140,16 +129,15 @@
   (for ([c cont])
     (match c
       [(list 'syncheck:add-definition-target start id)
-       (when (set-member? syms id)
+       (when (set-member? need-copy-syms id)
          (mark-rec! start))]
       [_ (void)]))
 
   (string-join
    (for*/list ([stx stxes]
-               [pos (in-value (string-pos->bytes-pos (sub1 (syntax-position stx))))]
+               [pos (in-value (sub1 (syntax-position stx)))]
                #:when (marked? pos))
-     (define str-pos (sub1 (syntax-position stx)))
-     (substring code-string str-pos (+ str-pos (syntax-span stx))))
+     (substring code pos (+ pos (syntax-span stx))))
    "\n\n"))
 
 (let* ([lang-line (make-parameter #f)]
