@@ -42,5 +42,5 @@ Other platforms are not supported because I don't use them and can't test it. Fe
 
 ## License
 
-The `check-syntax.rkt` and files under `private/` are belong to drracket. It's under Apache v2 and MIT license.
+The `check-syntax.rkt` and files under `private/` are belong to [drracket](https://github.com/racket/drracket). It's under Apache v2 and MIT license.
 
