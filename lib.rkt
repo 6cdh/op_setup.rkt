@@ -201,6 +201,9 @@
 (define (sbst-set! sbst key new-val)
   (unsafe-vector-set! (SBST-vals sbst) (sbst-search-index sbst key) new-val))
 
+(define (sbst-remove! sbst key)
+  (sbst-set! sbst key (SBST-none sbst)))
+
 (define (sbst-update! sbst key updater default)
   (sbst-set! sbst key (updater (sbst-ref sbst key default))))
 

@@ -1,8 +1,15 @@
-#lang racket
+#lang racket/base
 
-(require drracket/check-syntax
+(require "check-syntax.rkt"
          data/skip-list
-         syntax/modread)
+         syntax/modread
+         racket/class
+         racket/file
+         racket/set
+         racket/match
+         racket/port
+         racket/string
+         racket/cmdline)
 
 (define *lib* "lib.rkt")
 
@@ -15,7 +22,7 @@
 
     (define/override (syncheck:find-source-object stx)
       (if (equal? (syntax-source stx) src)
-          stx
+          src
           #f))
 
     (define/override (syncheck:add-mouse-over-status obj start end str)
