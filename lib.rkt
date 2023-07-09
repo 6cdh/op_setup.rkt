@@ -21,10 +21,10 @@
 
 (require data/heap)
 (require data/skip-list)
-(require syntax/parse)
 (require syntax/parse/define)
 (require racket/sandbox)
-(require racket/unsafe/ops)
+(require (rename-in racket/unsafe/ops
+                    [unsafe-fxquotient quotient]))
 
 ;; array utils
 
@@ -178,28 +178,28 @@
 
 (define (make-sbst lst none)
   (define keys (list->vector lst))
-  (SBST keys (make-vector (unsafe-vector-length keys) none) none))
+  (SBST keys (make-vector (vector-length keys) none) none))
 
 (define (sbst-search-index sbst key)
   (define keys (SBST-keys sbst))
-  (define n (unsafe-vector-length keys))
+  (define n (vector-length keys))
   (let loop ([l 0]
              [r n])
-    (define mid (unsafe-fxquotient (unsafe-fx+ l r) 2))
-    (cond [(unsafe-fx= l r) l]
-          [(unsafe-fx<= key (unsafe-vector-ref keys mid)) (loop l mid)]
-          [else (loop (unsafe-fx+ 1 mid) r)])))
+    (define mid (quotient (+ l r) 2))
+    (cond [(= l r) l]
+          [(<= key (vector-ref keys mid)) (loop l mid)]
+          [else (loop (+ 1 mid) r)])))
 
 (define (sbst-ref sbst key default)
   (define index (sbst-search-index sbst key))
   (define vals (SBST-vals sbst))
-  (if (or (unsafe-fx>= index (unsafe-vector-length vals))
-          (equal? (unsafe-vector-ref vals index) (SBST-none sbst)))
+  (if (or (>= index (vector-length vals))
+          (equal? (vector-ref vals index) (SBST-none sbst)))
       default
-      (unsafe-vector-ref vals index)))
+      (vector-ref vals index)))
 
 (define (sbst-set! sbst key new-val)
-  (unsafe-vector-set! (SBST-vals sbst) (sbst-search-index sbst key) new-val))
+  (vector-set! (SBST-vals sbst) (sbst-search-index sbst key) new-val))
 
 (define (sbst-remove! sbst key)
   (sbst-set! sbst key (SBST-none sbst)))
@@ -211,14 +211,39 @@
   (sbst-search-index sbst key))
 
 (define (sbst-iter-next sbst it)
-  (if (= (unsafe-fx+ 1 it) (unsafe-vector-length (SBST-keys sbst)))
+  (if (= (+ 1 it) (vector-length (SBST-keys sbst)))
       #f
-      (unsafe-fx+ 1 it)))
+      (+ 1 it)))
 
 (define (sbst-iter-prev sbst it)
-  (if (= -1 (unsafe-fx- it 1))
+  (if (= -1 (- it 1))
       #f
-      (unsafe-fx- it 1)))
+      (- it 1)))
+
+;; multiset
+
+(define (make-multiset)
+  (make-adjustable-skip-list))
+
+(define (multiset-add! mset val)
+  (skip-list-update! mset val add1 0))
+
+(define (multiset-remove! mset val)
+  (skip-list-update! mset val sub1 1)
+  (when (= 0 (skip-list-ref mset val))
+    (skip-list-remove! mset val)))
+
+(define (multiset-minimum mset)
+  (define it (skip-list-iterate-first mset))
+  (if it
+      (skip-list-iterate-key mset it)
+      #f))
+
+(define (multiset-maximum mset limit)
+  (define it (skip-list-iterate-greatest/<=? mset limit))
+  (if it
+      (skip-list-iterate-key mset it)
+      #f))
 
 ;; algorithms
 
@@ -555,6 +580,18 @@
             args ...
     (min mini last-expr)))
 
+(define-syntax-rule (for*/max init-minimum-value args ... last-expr)
+  (for*/fold ([maxv init-minimum-value])
+             args ...
+    (max maxv last-expr)))
+
+(define-syntax-rule (for*/min init-maximum-value args ... last-expr)
+  (for*/fold ([mini init-maximum-value])
+             args ...
+    (min mini last-expr)))
+
+;; others
+
 (define-syntax-parse-rule (upd! var:id updater)
   (set! var (updater var)))
 
@@ -760,6 +797,16 @@
 (define (bitcount x)
   (for/sum ([i 64])
     (if (bitwise-bit-set? x i) 1 0)))
+
+(define (generate-primes limit)
+  (let ([table (make-vector (add1 limit) #t)])
+    (aset! table 0 #f)
+    (aset! table 1 #f)
+    (for ([i (in-range 2 (add1 limit))])
+      (when (aref table i)
+        (for ([j (in-range (* 2 i) (add1 limit) i)])
+          (aset! table j #f))))
+    (λ (i) (aref table i))))
 
 (provide (all-defined-out))
 
