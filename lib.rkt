@@ -487,14 +487,11 @@
   (set!-values (x y) (values y x)))
 
 ;; threading macro
-;; `%` as placeholder
 ;; example:
-(define-syntax-parser ~>
-  #:datum-literals (%)
-  [(_ v)
-   #'v]
-  [(_ v (fn args1 ... % args2 ...) rems ...)
-   #'(~> (fn args1 ... v args2 ...) rems ...)])
+;; (~> x (doA x other-arg) (doB x other-arg))
+(define-syntax-parse-rule (~> x:id exprs ...)
+  (let* ([x exprs] ...)
+      x))
 
 ;; leetcode modulo
 (define (lc-mod-fn x)
