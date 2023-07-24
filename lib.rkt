@@ -8,6 +8,7 @@
 ;; * segment tree
 ;; * disjoint set
 ;; * static BST
+;; * fast-set
 ;; * algorithms
 ;; * data structure helpers
 ;; * syntax
@@ -219,6 +220,26 @@
   (if (= -1 (- it 1))
       #f
       (- it 1)))
+
+;; fast-set
+
+(define (make-fset)
+  (make-hash))
+
+(define (fset-has? fs v)
+  (hash-has-key? fs v))
+
+(define (fset-add! fs v)
+  (hash-set! fs v #t))
+
+(define (fset-remove! fs v)
+  (hash-remove! fs v))
+
+(define (list->fset lst)
+  (for/fold ([fs (make-fset)])
+            ([v lst])
+    (fset-add! fs v)
+    fs))
 
 ;; multiset
 
@@ -491,7 +512,7 @@
 ;; (~> x (doA x other-arg) (doB x other-arg))
 (define-syntax-parse-rule (~> x:id exprs ...)
   (let* ([x exprs] ...)
-      x))
+    x))
 
 ;; leetcode modulo
 (define (lc-mod-fn x)
@@ -804,6 +825,9 @@
         (for ([j (in-range (* 2 i) (add1 limit) i)])
           (aset! table j #f))))
     (λ (i) (aref table i))))
+
+(define (abs-diff x y)
+  (abs (- x y)))
 
 (provide (all-defined-out))
 

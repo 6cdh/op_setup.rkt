@@ -21,7 +21,8 @@
     (define cont '())
 
     (define/override (syncheck:find-source-object stx)
-      (if (equal? (syntax-source stx) src)
+      (if (and (equal? (syntax-source stx) src)
+               (syntax-original? stx))
           src
           #f))
 
