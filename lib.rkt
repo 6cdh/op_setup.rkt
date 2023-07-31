@@ -380,7 +380,7 @@
   (let ([res form])
     (display tag)
     (display ": ")
-    (pretty-display res)
+    (println res)
     res))
 
 ;; replace recursive function `fn` with a new same function except it
@@ -715,10 +715,19 @@
   (define n (vector-length vec))
   (vector-ref vec (quotient n 2)))
 
-(define in-reverse-range
+;; ranges
+
+(define in-closed-range in-inclusive-range)
+
+(define in-rev-range
   (case-lambda
     [(from to) (in-range (sub1 to) (sub1 from) -1)]
     [(from to delta) (in-range (- to delta) (- from delta) (- delta))]))
+
+(define in-closed-rev-range
+  (case-lambda
+    [(from to) (in-rev-range from (add1 to))]
+    [(from to delta) (in-rev-range from (+ to delta) delta)]))
 
 (define (string-ref-default str i default)
   (if (< -1 i (string-length str))
