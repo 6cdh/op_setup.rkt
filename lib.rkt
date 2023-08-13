@@ -9,6 +9,7 @@
 ;; * disjoint set
 ;; * static BST
 ;; * fast-set
+;; * bitset
 ;; * algorithms
 ;; * data structure helpers
 ;; * syntax
@@ -240,6 +241,44 @@
             ([v lst])
     (fset-add! fs v)
     fs))
+
+;; bitset
+
+(struct Bitset
+  (bits val->mask full)
+  #:transparent)
+
+(define (make-bitset lst)
+  (define h (make-hash))
+  (for ([(v i) (in-indexed lst)])
+    (hash-set! h v (expt 2 i)))
+  (Bitset 0 h (sub1 (expt 2 (length lst)))))
+
+(define (bitset-has? bs val)
+  (positive? (bitwise-and (Bitset-bits bs)
+                          (hash-ref (Bitset-val->mask bs) val))))
+
+(define (bitset-empty? bs)
+  (zero? (Bitset-bits bs)))
+
+(define (bitset-full? bs)
+  (= (Bitset-bits bs) (Bitset-full bs)))
+
+(define (bitset-add bs val)
+  (match bs
+    [(Bitset bits val->mask full)
+     (Bitset (bitwise-ior bits (hash-ref val->mask val)) val->mask full)]))
+
+(define (bitset-remove bs val)
+  (match bs
+    [(Bitset bits val->mask full)
+     (Bitset (bitwise-and bits (bitwise-not (hash-ref val->mask val)))
+             val->mask full)]))
+
+;; is `bitset` a subset of `bits`?
+;; bitset-subset? : (integer, integer) -> boolean
+(define (bitset-subset? bits bitset)
+  (= bitset (bitwise-ior bits bitset)))
 
 ;; multiset
 
@@ -644,11 +683,6 @@
   (for/fold ([h (hash)])
             ([v seq])
     (hash-update h v add1 0)))
-
-;; is `bitset` a subset of `bits`?
-;; bitset-subset? : (integer, integer) -> boolean
-(define (bitset-subset? bits bitset)
-  (= bitset (bitwise-ior bits bitset)))
 
 (define (compare x y)
   (cond [(= x y) '=]
