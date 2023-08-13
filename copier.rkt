@@ -34,11 +34,6 @@
       (define obj (list 'syncheck:add-definition-target start id))
       (set! cont (cons obj cont)))
 
-    (define/override (syncheck:add-jump-to-definition obj start end
-                                                      id filename submods)
-      (define obj (list 'jump-to-definition start end id))
-      (set! cont (cons obj cont)))
-
     (define/override (syncheck:add-arrow _obj1
                                          def-left _def-right
                                          _obj2
@@ -61,8 +56,9 @@
   (port-count-lines! in)
   (parameterize ([current-annotations info-collector]
                  [current-namespace base-ns])
-    (define expanded (expand (with-module-reading-parameterization
-                               (lambda () (read-syntax src in)))))
+    (define expanded (expand
+                      (with-module-reading-parameterization
+                        (lambda () (read-syntax src in)))))
     (add-syntax expanded)
     (done))
 
