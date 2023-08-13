@@ -554,8 +554,10 @@
     x))
 
 ;; leetcode modulo
+(define lc-mod-const (+ #e1e9 7))
+
 (define (lc-mod-fn x)
-  (modulo x (+ 7 #e1e9)))
+  (modulo x lc-mod-const))
 
 ;; mod for nested expression
 ;; example:
@@ -871,6 +873,32 @@
 
 (define (abs-diff x y)
   (abs (- x y)))
+
+(define (divisible x p)
+  (= 0 (modulo x p)))
+
+;; return a list a indexes `ans`, for each index `i`, `ans[i]` is the
+;; index of the previous element that satisfy
+;; `(pred (aref lst (aref ans i)) (aref lst i))`
+;; O(n)
+(define (find-prev lst pred)
+  (vec! lst)
+  (define ans (make-vector (alen lst) -1))
+
+  (for/fold ([stack '()])
+            ([(v i) (in-indexed lst)])
+    (define rems (or (memf (λ (j) (pred (aref lst j) v)) stack) '()))
+    (when (not (null? rems))
+      (aset! ans i (car rems)))
+    (cons i rems))
+
+  (vector->list ans))
+
+;; like `find-prev`, but the index is for the next element
+(define (find-next lst pred)
+  (define n (length lst))
+  (reverse (map (λ (i) (- n 1 i))
+                (find-prev (reverse lst) pred))))
 
 (provide (all-defined-out))
 
