@@ -94,41 +94,52 @@
   (define cont (analyze code))
 
   (define marked-set (mutable-set))
-  (define sorted-top-level-poses (make-skip-list))
+  (define sorted-references (make-skip-list))
 
   (for ([stx stxes])
-    (skip-list-set! sorted-top-level-poses
+    (skip-list-set! sorted-references
                     (sub1 (syntax-position stx))
-                    #t))
+                    '()))
 
-  (define (top-level-start-pos pos)
-    (define it (skip-list-iterate-greatest/<=? sorted-top-level-poses pos))
-    (skip-list-iterate-key sorted-top-level-poses it))
+  (define (top-level-form-start-pos pos)
+    (define it (skip-list-iterate-greatest/<=? sorted-references pos))
+    (skip-list-iterate-key sorted-references it))
 
   (define (mark-copy! pos)
-    (set-add! marked-set (top-level-start-pos pos)))
+    (set-add! marked-set (top-level-form-start-pos pos)))
 
   (define (marked? pos)
-    (set-member? marked-set (top-level-start-pos pos)))
+    (set-member? marked-set (top-level-form-start-pos pos)))
 
-  (define (same-top-level? pos1 pos2)
-    (= (top-level-start-pos pos1)
-       (top-level-start-pos pos2)))
+  (define (in-same-top-level? pos1 pos2)
+    (= (top-level-form-start-pos pos1)
+       (top-level-form-start-pos pos2)))
 
   (define (in-this-module? pos)
-    (skip-list-iterate-greatest/<=? sorted-top-level-poses pos))
+    (skip-list-iterate-greatest/<=? sorted-references pos))
+
+  (define (refs-from-definition pos)
+    (skip-list-ref sorted-references (top-level-form-start-pos pos)))
+
+  (define (add-ref! from to)
+    (skip-list-set! sorted-references
+                    from
+                    (cons to (skip-list-ref sorted-references from '()))))
 
   (define (mark-rec! pos)
     (when (not (marked? pos))
       (mark-copy! pos)
-      (for ([c cont])
-        (match c
-          [(list 'syncheck:add-arrow def-start ref-start)
-           (when (and (in-this-module? def-start)
-                      (same-top-level? pos ref-start)
-                      (not (same-top-level? pos def-start)))
-             (mark-rec! def-start))]
-          [_ (void)]))))
+      (for ([ref (refs-from-definition pos)])
+        (mark-rec! ref))))
+
+  (for ([c cont])
+    (match c
+      [(list 'syncheck:add-arrow to-pos from-pos)
+       #:when (in-this-module? to-pos)
+       (define pos (top-level-form-start-pos from-pos))
+       (when (not (in-same-top-level? pos to-pos))
+         (add-ref! pos to-pos))]
+      [_ (void)]))
 
   (for ([c cont])
     (match c

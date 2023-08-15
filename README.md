@@ -25,6 +25,7 @@ Other platforms are not supported because I don't use them and can't test it. Fe
 
 * Your code must be correct in order to be copied otherwise the script will complain when analyze the dependency of your code.
 * By default, `#lang racket` is not copied. Use the `--langline` flag with `copier.rkt` to include it.
+* the current copy time is ~2s, you can run `raco make check-syntax.rkt` to reduce it to 1.4s.
 
 ## Library
 
