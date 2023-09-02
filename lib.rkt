@@ -900,5 +900,8 @@
   (reverse (map (λ (i) (- n 1 i))
                 (find-prev (reverse lst) pred))))
 
+(define (boolean->number x)
+  (if x 1 0))
+
 (provide (all-defined-out))
 
