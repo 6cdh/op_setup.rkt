@@ -3,8 +3,10 @@
 ;; TOC
 ;; * requires
 ;; * array utils
+;; * string utils
+;; * bitwise operations
 ;; * fenwick tree
-;; * array representation of tree
+;; * array representation of binary tree
 ;; * segment tree
 ;; * disjoint set
 ;; * static BST
@@ -37,48 +39,61 @@
     [(_ n init)
      (make-vector n init)]
     [(_ n args ...)
-     (build-vector n (lambda _ (make-array args ...)))]))
+     (build-vector n (λ _ (make-array args ...)))]))
 
 ;; array-ref
 ;; (aref array dims ...)
 (define-syntax aref
   (syntax-rules ()
     [(_ arr) arr]
-    [(_ arr i args ...)
-     (aref (vector-ref arr i) args ...)]))
+    [(_ arr i dims ...)
+     (aref (vector-ref arr i) dims ...)]))
 
 ;; array-set!
 ;; (aset! array dims ... new-value)
 (define-syntax aset!
   (syntax-rules ()
-    [(_ arr i v)
-     (vector-set! arr i v)]
-    [(_ arr i args ... v)
-     (aset! (vector-ref arr i) args ... v)]))
+    [(_ arr dim new-val)
+     (vector-set! arr dim new-val)]
+    [(_ arr dim1 dims ... new-val)
+     (aset! (vector-ref arr dim1) dims ... new-val)]))
 
 ;; array-update!
 ;; (aupd! array dims ... updater)
 ;; updater : x -> x
-(define-syntax-rule (aupd! arr dims ... fn)
-  (aset! arr dims ... (fn (aref arr dims ...))))
+(define-syntax-rule (aupd! arr dims ... updater)
+  (aset! arr dims ... (updater (aref arr dims ...))))
 
 ;; array-swap!
 ;; (aswap! array (dims1 ...) (dims2 ...))
-(define-syntax-rule (aswap! arr (index1 ...) (index2 ...))
-  (let ([t (aref arr index1 ...)])
-    (aset! arr index1 ... (aref arr index2 ...))
-    (aset! arr index2 ... t)))
+(define-syntax-rule (aswap! arr (dims1 ...) (dims2 ...))
+  (let ([t (aref arr dims1 ...)])
+    (aset! arr dims1 ... (aref arr dims2 ...))
+    (aset! arr dims2 ... t)))
 
-(define-syntax-rule (alen arr)
-  (vector-length arr))
+(define alen vector-length)
 
 ;; string
 
-(define-syntax-rule (sref str i)
-  (string-ref str i))
+(define sref string-ref)
+(define slen string-length)
 
-(define-syntax-rule (slen str)
-  (string-length str))
+;; bitwise operations
+
+;; all the arguments should be a non-negative fixnum integer
+
+(define bs<< arithmetic-shift)
+(define bs& bitwise-and)
+(define bs|| bitwise-ior)
+(define bs! bitwise-not)
+(define bs-has? bitwise-bit-set?)
+(define bs^ bitwise-xor)
+
+(define (bs-set-lowest-zero-to-one x)
+  (bitwise-ior x (add1 x)))
+
+(define (bs-set-highest-one-to-zero x)
+  (bitwise-and x (sub1 x)))
 
 ;; fenwick tree
 
@@ -92,8 +107,8 @@
 (define (ft-add! fenwick-tree i delta)
   (let loop ([i i])
     (when (< i (vector-length fenwick-tree))
-      (aupd! fenwick-tree i (lambda (x) (+ x delta)))
-      (loop (bitwise-ior i (add1 i))))))
+      (aupd! fenwick-tree i (λ (x) (+ x delta)))
+      (loop (bs-set-lowest-zero-to-one i)))))
 
 ;; (sum (sublist fenwick-tree (range i j)))
 (define (ft-sum fenwick-tree i j)
@@ -103,34 +118,45 @@
     (cond [(> j i)
            (loop (+ sum (aref fenwick-tree (sub1 j)))
                  i
-                 (bitwise-and j (sub1 j)))]
+                 (bs-set-highest-one-to-zero j))]
           [(> i j)
            (loop (- sum (aref fenwick-tree (sub1 i)))
-                 (bitwise-and i (sub1 i))
+                 (bs-set-highest-one-to-zero i)
                  j)]
-          [(= i j)
-           sum])))
+          [else sum])))
 
-;; array representation of tree ;;
+;; array representation of binary tree ;;
 ;; the root is 1
 
-(define (tree-father k)
+(define (tree1-father k)
   (quotient k 2))
 
-(define (tree-left k)
+(define (tree1-left k)
   (* 2 k))
 
-(define (tree-right k)
+(define (tree1-right k)
   (add1 (* 2 k)))
 
-(define (tree-sibling k)
+(define (tree0-father k)
+  (sub1 (quotient k 2)))
+
+(define (tree0-left k)
+  (+ (* 2 k) 1))
+
+(define (tree0-right k)
+  (+ (* 2 k) 2))
+
+(define (tree1-sibling k)
   (bitwise-xor k 1))
 
 ;; segment tree ;;
 
+;; the lowest layer of the segment tree is the minimum power of 2
+;; that is not less than `len`
+
 (define (make-segtree len init op)
   (let ([n (max 2 (expt 2 (exact-ceiling (log len 2))))])
-    (list (make-array (* 2 n) init) n op)))
+    (list (make-vector (* 2 n) init) n op)))
 
 (define (segtree-ref segtree k)
   (match-let ([(list tree n op) segtree])
@@ -142,17 +168,18 @@
       (cond [(> l r) result]
             [(odd? l) (loop (add1 l) r (op result (aref tree l)))]
             [(even? r) (loop l (sub1 r) (op result (aref tree r)))]
-            [else (loop (tree-father l) (tree-father r) result)]))))
+            [else (loop (tree1-father l) (tree1-father r) result)]))))
 
 (define (segtree-set! segtree key newv)
   (match-let ([(list tree n op) segtree])
     (aset! tree (+ key n) newv)
 
-    (let loop ([k (tree-father (+ key n))])
+    (let loop ([k (tree1-father (+ key n))])
       (when (>= k 1)
         (aset! tree k
-               (op (aref tree (tree-left k)) (aref tree (tree-right k))))
-        (loop (tree-father k))))))
+               (op (aref tree (tree1-left k))
+                   (aref tree (tree1-right k))))
+        (loop (tree1-father k))))))
 
 ;; disjoint set
 
@@ -161,12 +188,11 @@
   (build-vector n values))
 
 (define (dsu-rootof dsu x)
-  (define r (aref dsu x))
-  (cond [(= r x)
-         x]
-        [else
-         (aset! dsu x (dsu-rootof dsu r))
-         (aref dsu x)]))
+  (match (aref dsu x)
+    [(== x) x]
+    [fa (let ([r (dsu-rootof dsu fa)])
+          (aset! dsu x r)
+          r)]))
 
 (define (dsu-union! dsu a b)
   (aset! dsu (dsu-rootof dsu a) (dsu-rootof dsu b)))
@@ -174,6 +200,8 @@
 ;; static BST
 
 ;; Binary Search Tree on a predefined sorted vector
+;; The only usage is that it's much faster than
+;; data/skip-list or data/splay-tree
 
 (struct SBST
   (keys vals none))
@@ -209,20 +237,9 @@
 (define (sbst-update! sbst key updater default)
   (sbst-set! sbst key (updater (sbst-ref sbst key default))))
 
-(define (sbst-iter sbst key)
-  (sbst-search-index sbst key))
-
-(define (sbst-iter-next sbst it)
-  (if (= (+ 1 it) (vector-length (SBST-keys sbst)))
-      #f
-      (+ 1 it)))
-
-(define (sbst-iter-prev sbst it)
-  (if (= -1 (- it 1))
-      #f
-      (- it 1)))
-
 ;; fast-set
+
+;; it uses mutable hashtable as a faster replacement of set
 
 (define (make-fset)
   (make-hash))
@@ -304,6 +321,7 @@
   (if it
       (skip-list-iterate-key mset it)
       #f))
+
 
 ;; algorithms
 
@@ -447,19 +465,18 @@
 ;; cache the function `fn`
 ;; (cachef! function-name)
 ;; It use a hashtable for cache.
+(define-syntax-parse-rule (cachef! fn:id)
+  (set! fn (cachef-hash fn)))
 
-;; The second usage is
-;; (cachef! function-name dims ... not-exist-value)
+;; (cachef-vec! function-name dims ... not-exist-value)
 ;; Then it would use vector for cache.
 ;; dims are number or expression that evaluate to number
 ;; not-exist-value is the value that indicate that the
 ;; key-value pair is not exist.
-(define-syntax-parse-rule (cachef! fn:id args:expr ...)
-  (set! fn (cachef fn args ...)))
+(define-syntax-parse-rule (cachef-vec! fn:id hints:expr ... init)
+  (set! fn (cachef-vec fn hints ... init)))
 
-(define-syntax-parser cachef
-  [(_ fn:id)
-   #'(cachef-hash fn)]
+(define-syntax-parser cachef-vec
   [(_ fn:id hints:expr ... init)
    (with-syntax ([(args ...) (generate-temporaries #'(hints ...))])
      #'(let* ([cache (make-array hints ... init)]
@@ -903,5 +920,74 @@
 (define (boolean->number x)
   (if x 1 0))
 
-(provide (all-defined-out))
+(define-syntax-parser as-function1!
+  [(_ (var:id args ...))
+   #'(set! var
+           (let ([old-var var])
+             (cond [(vector? old-var)
+                    (λ (args ...) (aref old-var args ...))]
+                   [(hash? old-var)
+                    (λ (x) (hash-ref old-var x))])))])
 
+(define-syntax-parse-rule (as-function! spec ...)
+  (let ()
+    (as-function1! spec) ...))
+
+;; return a function lcp.
+;; (lcp i) is the longest prefix substring which is also
+;; the suffix of substring str[0..i]
+(define (longest-common-prefix-function str)
+  (define n (string-length str))
+  (define prefix (make-vector n 0))
+  (for ([i (in-range 1 n)])
+    (let loop ([j (aref prefix (sub1 i))])
+      (cond [(char=? (sref str i) (sref str j))
+             (aset! prefix i (add1 j))]
+            [(= j 0)
+             (void)]
+            [else
+             (loop (aref prefix (sub1 j)))])))
+  (λ (i) (aref prefix i)))
+
+(define (identity-matrix n)
+  (for/vector ([i n])
+    (for/vector ([j n])
+      (if (= i j)
+          1
+          0))))
+
+(define (matrix/* mat1 mat2)
+  (define m (alen mat1))
+  (define n (alen mat2))
+  (for/vector ([i (in-range 0 m)])
+    (for/vector ([j (in-range 0 n)])
+      (for/sum ([k (in-range 0 n)])
+        (* (aref mat1 i k) (aref mat2 k j))))))
+
+(define (matrix-expmod mat p modfn)
+  (cond [(= p 0)
+         (identity-matrix (alen (aref mat 0)))]
+        [else
+         (define mat/2 (matrix-expmod mat (quotient p 2) modfn))
+         (define ans (if (odd? p)
+                         (matrix/* mat (matrix/* mat/2 mat/2))
+                         (matrix/* mat/2 mat/2)))
+         (for/vector ([row ans])
+           (for/vector ([v row])
+             (modfn v)))]))
+
+(define (sum lst)
+  (foldl + 0 lst))
+
+(define (bitwise-count-ones num)
+  (if (= num 0)
+      0
+      (add1 (bitwise-count-ones (bitwise-and num (sub1 num))))))
+
+(define heap-max heap-min)
+(define heap-remove-max! heap-remove-min!)
+
+(define (heap-empty? h)
+  (= 0 (heap-count h)))
+
+(provide (all-defined-out))
