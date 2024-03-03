@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require "check-syntax.rkt"
+(require drracket/check-syntax
          data/skip-list
          syntax/modread
          racket/class

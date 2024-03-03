@@ -41,7 +41,4 @@ Other platforms are not supported because I don't use them and can't test it. Fe
 * modulo macro that modulo nested expression: `lc-mod`
 * `C` macro that provide part of C like language experience, support nested infix expression, convenient bitwise operation operator, C style assignment.
 
-## License
-
-The `check-syntax.rkt` and files under `private/` are belong to [drracket](https://github.com/racket/drracket). It's under Apache v2 and MIT license.
 
