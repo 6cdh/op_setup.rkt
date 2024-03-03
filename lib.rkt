@@ -111,6 +111,7 @@
       (loop (bs-set-lowest-zero-to-one i)))))
 
 ;; (sum (sublist fenwick-tree (range i j)))
+;; O(log n)
 (define (ft-sum fenwick-tree i j)
   (let loop ([sum 0]
              [i i]
@@ -158,10 +159,12 @@
   (let ([n (max 2 (expt 2 (exact-ceiling (log len 2))))])
     (list (make-vector (* 2 n) init) n op)))
 
+;; O(1)
 (define (segtree-ref segtree k)
   (match-let ([(list tree n op) segtree])
     (aref tree (+ k n))))
 
+;; O(log n)
 (define (segtree-query segtree left right)
   (match-let ([(list tree n op) segtree])
     (let loop ([l (+ left n)] [r (+ right n)] [result (aref tree 0)])
@@ -170,6 +173,7 @@
             [(even? r) (loop l (sub1 r) (op result (aref tree r)))]
             [else (loop (tree1-father l) (tree1-father r) result)]))))
 
+;; O(log n)
 (define (segtree-set! segtree key newv)
   (match-let ([(list tree n op) segtree])
     (aset! tree (+ key n) newv)
