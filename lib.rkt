@@ -433,15 +433,18 @@
     body ...))
 
 ;; print expr and their value
-(define-syntax-rule (debugv expr ...)
-  (let ()
-    (debug (quote expr) expr) ...))
+(define-syntax debugv
+  (syntax-rules ()
+    [(_ expr)
+     (debug (quote expr) expr)]
+    [(_ exprs ...)
+     (debug (list (quote exprs) ...) (list exprs ...))]))
 
 (define-syntax-rule (debug tag form)
   (let ([res form])
     (display tag)
     (display ": ")
-    (println res)
+    (pretty-print res)
     res))
 
 ;; replace recursive function `fn` with a new same function except it
@@ -515,21 +518,57 @@
 
 ;; replace `fn` with its `log-call-times` version
 (define-syntax-rule (log-call-times! fn)
-  (set! fn (log-call-times fn)))
+  (set! fn (log-call-times (quote fn) fn)))
 
 ;; return a new function that same with `fn`,
 ;; but record the number of calls, and can obtain
-;; it by running `(fn 'query)`.
-(define (log-call-times fn)
+;; it by running `(fn 'query)` or log by `(fn 'log)`.
+(define (log-call-times name fn)
   (let ([cnt 0])
     (define (call . args)
       (set! cnt (add1 cnt))
       (apply fn args))
 
-    (define (dispatch method . args)
-      (match method
-        ['query cnt]
-        [_ (apply call method args)]))
+    (define (dispatch . args)
+      (match args
+        ['(query) cnt]
+        ['(log) (displayln (format "~a: called ~a times" name cnt))]
+        [_ (apply call args)]))
+    dispatch))
+
+;; statistic function `fn`
+;; use `(fn 'query)` to print the results
+(define-syntax-rule (statistic! fn)
+  (set! fn (statistic (quote fn) fn)))
+
+(define (statistic name fn)
+  (let ([cnt 0]
+        [arg-set (mutable-set)]
+        [res-set (mutable-set)]
+        [cpu-time 0]
+        [real-time 0]
+        [gc-time 0])
+    (define (call args)
+      (set-add! arg-set args)
+      (set! cnt (add1 cnt))
+      (define-values (results cput realt gct) (time-apply fn args))
+      (set! cpu-time (+ cpu-time cput))
+      (set! real-time (+ real-time realt))
+      (set! gc-time (+ gc-time gct))
+      (set-add! res-set results)
+      (apply values results))
+
+    (define (dispatch . args)
+      (match args
+        ['(log)
+         (displayln (format "'~a' statistic:" name))
+         (displayln (format "    ~a distinct arguments" (set-count arg-set)))
+         (displayln (format "    ~a distinct results" (set-count res-set)))
+         (displayln (format "    ~a calls" cnt))
+         (displayln (format "    ~a ms cpu time" cpu-time))
+         (displayln (format "    ~a ms real time" real-time))
+         (displayln (format "    ~a ms gc time" gc-time))]
+        [_ (call args)]))
     dispatch))
 
 ;; assert invariant
@@ -703,9 +742,10 @@
 
 ;; convert a sequence that can iterate with `for` to hash table counter
 (define (sequence->counter seq)
-  (for/fold ([h (hash)])
+  (for/fold ([h (make-hash)])
             ([v seq])
-    (hash-update h v add1 0)))
+    (hash-update! h v add1 0)
+    h))
 
 (define (compare x y)
   (cond [(= x y) '=]
