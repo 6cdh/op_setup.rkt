@@ -458,9 +458,9 @@
     (lambda args
       (define call-indent
         (string-join
-         (append (make-list (max 0 (sub1 cnt)) "\u2502  ")
-                 (make-list (min 1 cnt) "\u251C\u2500\u2500"))
-         ""))
+          (append (make-list (max 0 (sub1 cnt)) "\u2502  ")
+                  (make-list (min 1 cnt) "\u251C\u2500\u2500"))
+          ""))
       (define return-indent (string-append* (make-list cnt "\u2502  ")))
       (displayln (format "~a~a~a" call-indent tag args))
       (set! cnt (add1 cnt))
@@ -795,9 +795,9 @@
 
 (define (scanr proc init lst)
   (reverse
-   (for/list ([v (reverse lst)])
-     (set! init (proc v init))
-     init)))
+    (for/list ([v (reverse lst)])
+      (set! init (proc v init))
+      init)))
 
 (define (sublist lst from to)
   (drop (take lst to) from))
@@ -870,19 +870,19 @@
     [0 '()]
     [1 (list lst)]
     [_ (reverse
-        (map reverse
-             (for/fold ([res '()])
-                       ([p lst]
-                        [v (cdr lst)])
-               (match* [res (same? (key p) (key v))]
-                 [('() #t)
-                  (list (list v p))]
-                 [('() #f)
-                  (list (list v) (list p))]
-                 [((cons fst rem) #t)
-                  (cons (cons v fst) rem)]
-                 [(res #f)
-                  (cons (list v) res)]))))]))
+         (map reverse
+              (for/fold ([res '()])
+                        ([p lst]
+                         [v (cdr lst)])
+                (match* [res (same? (key p) (key v))]
+                  [('() #t)
+                   (list (list v p))]
+                  [('() #f)
+                   (list (list v) (list p))]
+                  [((cons fst rem) #t)
+                   (cons (cons v fst) rem)]
+                  [(res #f)
+                   (cons (list v) res)]))))]))
 
 (define-syntax-parse-rule (sort! lst:id less-than?:expr args ...)
   (set! lst (sort lst less-than? args ...)))
@@ -1035,3 +1035,4 @@
   (= 0 (heap-count h)))
 
 (provide (all-defined-out))
+
