@@ -25,6 +25,7 @@
 
 (require data/heap)
 (require data/skip-list)
+(require data/splay-tree)
 (require syntax/parse/define)
 (require racket/sandbox)
 (require (rename-in racket/unsafe/ops
@@ -37,7 +38,7 @@
 (define-syntax make-array
   (syntax-rules ()
     [(_ n init)
-     (make-vector n init)]
+     (build-vector n (λ _ init))]
     [(_ n args ...)
      (build-vector n (λ _ (make-array args ...)))]))
 
@@ -320,11 +321,42 @@
       (skip-list-iterate-key mset it)
       #f))
 
-(define (multiset-maximum mset limit)
-  (define it (skip-list-iterate-greatest/<=? mset limit))
+(define (multiset-maximum mset)
+  (define it (skip-list-iterate-greatest/<=? mset +inf.0))
   (if it
       (skip-list-iterate-key mset it)
       #f))
+
+;; lazy heap
+;; provide O(log n) lazy delete compared normal heap O(n) delete
+;; an alternative to multiset
+
+(struct LazyHeap
+  [deleted
+   heap])
+
+(define (make-lazyheap <=)
+  (LazyHeap (make-hash) (make-heap <=)))
+
+(define (lazyheap-add! lh x)
+  (heap-add! (LazyHeap-heap lh) x))
+
+(define (lazyheap-delete! lh x)
+  (counter-add! (LazyHeap-deleted lh) x))
+
+(define (lazyheap-min lh)
+  (match-define (LazyHeap deleted heap) lh)
+  (let loop ()
+    (define minv (heap-min heap))
+    (cond [(hash-has-key? deleted minv)
+           (counter-remove! deleted minv)
+           (heap-remove-min! heap)
+           (loop)]
+          [else minv])))
+
+(define (lazyheap-remove-min! lh)
+  (lazyheap-min lh)
+  (heap-remove-min! (LazyHeap-heap lh)))
 
 
 ;; algorithms
@@ -415,6 +447,10 @@
 (define (skip-list-update! sl key fn default)
   (skip-list-set! sl key
                   (fn (skip-list-ref sl key default))))
+
+(define (splay-tree-update! sl key fn default)
+  (splay-tree-set! sl key
+                   (fn (splay-tree-ref sl key default))))
 
 ;; return a list of keys in (inclusive-range beg end)
 (define (skip-list-range sl beg end)
