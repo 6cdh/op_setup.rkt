@@ -649,6 +649,20 @@
   (let* ([x exprs] ...)
     x))
 
+;; anoymous function macro with arguments placeholders
+(define-syntax (cut1 stx)
+  (syntax-case stx ()
+    [(_ exprs ...)
+     (with-syntax ([_1 (datum->syntax stx '_1)])
+       #'(λ (_1) exprs ...))]))
+
+(define-syntax (cut2 stx)
+  (syntax-case stx ()
+    [(_ exprs ...)
+     (with-syntax ([_1 (datum->syntax stx '_1)]
+                   [_2 (datum->syntax stx '_2)])
+       #'(λ (_1 _2) exprs ...))]))
+
 ;; leetcode modulo
 (define lc-mod-const (+ #e1e9 7))
 
@@ -821,6 +835,9 @@
 (define (alphabet-char->integer c)
   (- (char->integer c) (char->integer #\a)))
 
+(define (integer->alphabet-char i)
+  (integer->char (+ i (char->integer #\a))))
+
 (define (uppercase-char->integer c)
   (- (char->integer c) (char->integer #\A)))
 
@@ -930,7 +947,7 @@
             [i (in-naturals 0)])
     (* v (expt 2 i))))
 
-;; Return O(n^2) pairs of n length list
+;; Return O(n^2) pairs of a list
 (define (pairs lst)
   (let loop ([prev '()]
              [lst lst]
@@ -942,6 +959,20 @@
       [(prev (cons cur rem))
        (loop (cons cur prev) rem
              (append (map (λ (p) (cons p cur)) prev) result))])))
+
+;; Return O(n^2) sublists of list `lst`
+(define (sublists lst)
+  (define (sublists-head lst)
+    (match lst
+      ['() '()]
+      [(cons x xs)
+       (cons (list x)
+             (map (λ (rem) (cons x rem)) (sublists-head xs)))]))
+
+  (match lst
+    ['() '()]
+    [(cons _ xs) (append (sublists-head lst) (sublists xs))]))
+
 
 (define (counter-add! cter val)
   (hash-update! cter val add1 0))
