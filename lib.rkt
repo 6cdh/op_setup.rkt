@@ -1,21 +1,31 @@
 #lang racket
 
 ;; TOC
-;; * requires
-;; * array utils
-;; * string utils
-;; * bitwise operations
-;; * fenwick tree
-;; * array representation of binary tree
-;; * segment tree
-;; * disjoint set
-;; * static BST
-;; * fast-set
-;; * bitset
-;; * algorithms
-;; * data structure helpers
-;; * syntax
-;; * other functions
+;; * Data structure
+;; ** Helpers
+;; ** Multidimensional Array
+;; ** Fenwick Tree
+;; ** Array representation of Binary Tree
+;; ** Segment Tree
+;; ** Disjoint Set
+;; ** Static BST
+;; ** Fast Set
+;; ** BitSet
+;; ** MultiSet
+;; ** Lazy Heap
+;; ** Skip List
+;; ** Counter
+;; * Algorithm
+;; ** Range Sum
+;; ** Expmod
+;; ** Count Inversion
+;; ** Binary Search
+;; ** Graph
+;; * Functional
+;; ** Range
+;; ** Bitwise
+;; ** Others
+;; * Syntax
 
 ;; performance note:
 ;; * use pair instead of 2 element list
@@ -31,7 +41,15 @@
 (require (rename-in racket/unsafe/ops
                     [unsafe-fxquotient quotient]))
 
-;; array utils
+;; * Data structure
+
+;; ** Helpers
+
+(define alen vector-length)
+(define sref string-ref)
+(define slen string-length)
+
+;; ** Multidimensional Array
 
 ;; make a multi-dimension array
 ;; (make-array dims ... init-value)
@@ -72,31 +90,7 @@
     (aset! arr dims1 ... (aref arr dims2 ...))
     (aset! arr dims2 ... t)))
 
-(define alen vector-length)
-
-;; string
-
-(define sref string-ref)
-(define slen string-length)
-
-;; bitwise operations
-
-;; all the arguments should be a non-negative fixnum integer
-
-(define bs<< arithmetic-shift)
-(define bs& bitwise-and)
-(define bs|| bitwise-ior)
-(define bs! bitwise-not)
-(define bs-has? bitwise-bit-set?)
-(define bs^ bitwise-xor)
-
-(define (bs-set-lowest-zero-to-one x)
-  (bitwise-ior x (add1 x)))
-
-(define (bs-set-highest-one-to-zero x)
-  (bitwise-and x (sub1 x)))
-
-;; fenwick tree
+;; ** Fenwick Tree
 
 ;; make a fenwick tree with (range 0 n)
 ;; O(n)
@@ -127,8 +121,9 @@
                  j)]
           [else sum])))
 
-;; array representation of binary tree ;;
-;; the root is 1
+;; ** Array representation of Binary Tree
+
+; root is 1
 
 (define (tree1-father k)
   (quotient k 2))
@@ -151,11 +146,12 @@
 (define (tree1-sibling k)
   (bitwise-xor k 1))
 
-;; segment tree ;;
+;; ** Segment Tree
 
 ;; the lowest layer of the segment tree is the minimum power of 2
 ;; that is not less than `len`
 
+;; O(len)
 (define (make-segtree len init op)
   (let ([n (max 2 (expt 2 (exact-ceiling (log len 2))))])
     (list (make-vector (* 2 n) init) n op)))
@@ -186,7 +182,8 @@
                    (aref tree (tree1-right k))))
         (loop (tree1-father k))))))
 
-;; disjoint set
+
+;; ** Disjoint Set
 
 ;; make disjoint set of (range 0 n)
 (define (make-dsu n)
@@ -202,7 +199,7 @@
 (define (dsu-union! dsu a b)
   (aset! dsu (dsu-rootof dsu a) (dsu-rootof dsu b)))
 
-;; static BST
+;; ** Static BST
 
 ;; Binary Search Tree on a predefined sorted vector
 ;; The only usage is that it's much faster than
@@ -242,7 +239,7 @@
 (define (sbst-update! sbst key updater default)
   (sbst-set! sbst key (updater (sbst-ref sbst key default))))
 
-;; fast-set
+;; ** Fast Set
 
 ;; it uses mutable hashtable as a faster replacement of set
 
@@ -264,7 +261,9 @@
     (fset-add! fs v)
     fs))
 
-;; bitset
+;; ** BitSet
+
+;; a simple abstraction of a bitset of a list
 
 (struct Bitset
   (bits val->mask full)
@@ -297,12 +296,9 @@
      (Bitset (bitwise-and bits (bitwise-not (hash-ref val->mask val)))
              val->mask full)]))
 
-;; is `bitset` a subset of `bits`?
-;; bitset-subset? : (integer, integer) -> boolean
-(define (bitset-subset? bits bitset)
-  (= bitset (bitwise-ior bits bitset)))
+;; ** MultiSet
 
-;; multiset
+;; a set can contains duplicate elements
 
 (define (make-multiset)
   (make-adjustable-skip-list))
@@ -327,9 +323,18 @@
       (skip-list-iterate-key mset it)
       #f))
 
-;; lazy heap
-;; provide O(log n) lazy delete compared normal heap O(n) delete
-;; an alternative to multiset
+;; ** Heap
+
+(define heap-max heap-min)
+(define heap-remove-max! heap-remove-min!)
+
+(define (heap-empty? h)
+  (= 0 (heap-count h)))
+
+;; ** Lazy Heap
+
+;; provide O(log n) lazy delete compared normal heap O(n) delete.
+;; an faster alternative to multiset
 
 (struct LazyHeap
   [deleted
@@ -358,8 +363,49 @@
   (lazyheap-min lh)
   (heap-remove-min! (LazyHeap-heap lh)))
 
+;; ** Skip List
 
-;; algorithms
+(define (skip-list-update! sl key fn default)
+  (skip-list-set! sl key
+                  (fn (skip-list-ref sl key default))))
+
+;; return a list of keys in (inclusive-range beg end)
+(define (skip-list-range sl beg end)
+  (let loop ([lst '()]
+             [it (skip-list-iterate-least/>=? sl beg)])
+    (cond [(not it) lst]
+          [(> (skip-list-iterate-key sl it) end) lst]
+          [else (loop (cons (skip-list-iterate-key sl it) lst)
+                      (skip-list-iterate-next sl it))])))
+
+;; ** Splay Tree
+
+(define (splay-tree-update! sl key fn default)
+  (splay-tree-set! sl key
+                   (fn (splay-tree-ref sl key default))))
+
+;; ** Counter
+
+(define (make-counter [seq #f])
+  (if (false? seq)
+      (make-hash)
+      (for/fold ([h (make-hash)])
+                ([v seq])
+        (counter-add! h v)
+        h)))
+
+(define (counter-add! cter val)
+  (hash-update! cter val add1 0))
+
+(define (counter-remove! cter val)
+  (hash-update! cter val sub1)
+  (when (= 0 (hash-ref cter val))
+    (hash-remove! cter val)))
+
+
+;; * Algorithm
+
+;; ** Range Sum
 
 ;; range-sum : (listof number) -> procedure
 ;; return a procedure that calculates (sum (sublist arr (range i j)))
@@ -374,6 +420,8 @@
       (aset! prefix i (+ v (aref prefix (sub1 i)))))
     (λ (i j) (- (aref prefix j) (aref prefix i)))))
 
+;; ** Expmod
+
 ;; expmod : (number, number, number) -> number
 ;; return expt(a, b) mod m
 ;;
@@ -382,6 +430,8 @@
   (cond [(= b 0) 1]
         [(even? b) (modulo (sqr (expmod a (/ b 2) m)) m)]
         [else (modulo (* a (expmod a (sub1 b) m)) m)]))
+
+;; ** Count Inversion
 
 ;; count-inversions : (fenwick-tree, (listof number)) -> non-negative-integer
 ;; O(n log n)
@@ -395,12 +445,16 @@
       (ft-add! fenwick-tree v -1))
     res))
 
+;; ** Binary Search
+
 ;; binary search the first element that meets `op`
 (define (bsearch-least l r op)
   (define m (quotient (+ l r) 2))
   (cond [(= l r) l]
         [(op m) (bsearch-least l m op)]
         [else (bsearch-least (add1 m) r op)]))
+
+;; ** Graph
 
 ;; dijkstra algorithm
 ;; solve single source shortest path problem
@@ -454,27 +508,333 @@
 
   (list (build-path (list t)) (hash-ref dist t)))
 
+;; * Functional
 
-;; data structure helpers
+;; ** Bitwise
 
-(define (skip-list-update! sl key fn default)
-  (skip-list-set! sl key
-                  (fn (skip-list-ref sl key default))))
+;; all the arguments should be a non-negative fixnum integer
 
-(define (splay-tree-update! sl key fn default)
-  (splay-tree-set! sl key
-                   (fn (splay-tree-ref sl key default))))
+(define bs<< arithmetic-shift)
+(define bs& bitwise-and)
+(define bs|| bitwise-ior)
+(define bs! bitwise-not)
+(define bs-has? bitwise-bit-set?)
+(define bs^ bitwise-xor)
 
-;; return a list of keys in (inclusive-range beg end)
-(define (skip-list-range sl beg end)
-  (let loop ([lst '()]
-             [it (skip-list-iterate-least/>=? sl beg)])
-    (cond [(not it) lst]
-          [(> (skip-list-iterate-key sl it) end) lst]
-          [else (loop (cons (skip-list-iterate-key sl it) lst)
-                      (skip-list-iterate-next sl it))])))
+(define (bs-set-lowest-zero-to-one x)
+  (bitwise-ior x (add1 x)))
 
-;; syntax
+(define (bs-set-highest-one-to-zero x)
+  (bitwise-and x (sub1 x)))
+
+;; is `bitset` a subset of `bits`?
+;; bs-subset? : (integer, integer) -> boolean
+(define (bs-subset? bits bitset)
+  (= bitset (bitwise-ior bits bitset)))
+
+(define (bs-count-ones num)
+  (if (= num 0)
+      0
+      (add1 (bs-count-ones (bitwise-and num (sub1 num))))))
+
+(define (bitcount x)
+  (for/sum ([i 64])
+    (if (bitwise-bit-set? x i) 1 0)))
+
+;; ** Range
+
+(define in-closed-range in-inclusive-range)
+
+(define in-rev-range
+  (case-lambda
+    [(from to) (in-range (sub1 to) (sub1 from) -1)]
+    [(from to delta) (in-range (- to delta) (- from delta) (- delta))]))
+
+(define in-closed-rev-range
+  (case-lambda
+    [(from to) (in-rev-range from (add1 to))]
+    [(from to delta) (in-rev-range from (+ to delta) delta)]))
+
+;; ** Others
+
+;; convert (vectorof (vectorof x)) to (listof (listof x))
+(define (vector2d->list2d mat)
+  (map vector->list (vector->list mat)))
+
+;; reverse function of `vector2d->list2d`
+(define (list2d->vector2d lst)
+  (list->vector (map list->vector lst)))
+
+;; list->hash : (listof pair) -> hash
+(define (list->hash lst)
+  (for/fold ([h (hash)])
+            ([pair lst])
+    (hash-set h (car pair) (cdr pair))))
+
+;; convert a sequence that can iterate with `for` to hash table counter
+(define (sequence->counter seq)
+  (for/fold ([h (make-hash)])
+            ([v seq])
+    (hash-update! h v add1 0)
+    h))
+
+(define (compare x y)
+  (cond [(= x y) '=]
+        [(< x y) '<]
+        [else '>]))
+
+;; some function with same length name
+(define nth0 car)
+(define nth1 cadr)
+(define nth2 caddr)
+
+(define (∈ x set) (set-member? set x))
+(define (∉ x set) (not (set-member? set x)))
+(define U set-union)
+(define ∩ set-intersect)
+
+;; make a alphabet list from lowercase a to z
+(define (alphabet)
+  (map integer->char
+       (inclusive-range (char->integer #\a) (char->integer #\z))))
+
+(define (list-sum lst)
+  (foldl + 0 lst))
+
+(define (list-product lst)
+  (foldl * 1 lst))
+
+(define (maximum lst)
+  (foldl max (car lst) lst))
+
+(define (minimum lst)
+  (foldl min (car lst) lst))
+
+(define (digit-char->integer c)
+  (- (char->integer c) (char->integer #\0)))
+
+(define (alphabet-char->integer c)
+  (- (char->integer c) (char->integer #\a)))
+
+(define (integer->alphabet-char i)
+  (integer->char (+ i (char->integer #\a))))
+
+(define (uppercase-char->integer c)
+  (- (char->integer c) (char->integer #\A)))
+
+(define (scanl proc init lst)
+  (for/list ([v lst])
+    (set! init (proc v init))
+    init))
+
+(define (scanr proc init lst)
+  (reverse
+    (for/list ([v (reverse lst)])
+      (set! init (proc v init))
+      init)))
+
+(define (sublist lst from to)
+  (drop (take lst to) from))
+
+(define (vector-reverse vec)
+  (list->vector (reverse (vector->list vec))))
+
+;; median of a sorted list
+;; O(1)
+(define (median sorted-lst)
+  (define vec (list->vector sorted-lst))
+  (define n (vector-length vec))
+  (vector-ref vec (quotient n 2)))
+
+(define (string-ref-default str i default)
+  (if (< -1 i (string-length str))
+      (string-ref str i)
+      default))
+
+(define (sort< lst)
+  (sort lst <))
+
+(define (sort> lst)
+  (sort lst >))
+
+;; O(2^n * n) in total
+;; example: (in-subset lst #f)
+(define (in-subset lst stop)
+  (let* ([bits 0]
+         [n (length lst)]
+         [subset-size (expt 2 n)])
+    (define (gen)
+      (match bits
+        [(== subset-size) stop]
+        [_ (define res
+             (for/list ([i n]
+                        [val lst]
+                        #:when (bitwise-bit-set? bits i))
+               val))
+           (set! bits (add1 bits))
+           res]))
+    (in-producer gen stop)))
+
+(define (set->immutable s)
+  (list->set (set->list s)))
+
+(define (list2d-dims lstlst)
+  (match lstlst
+    ['()
+     (cons 0 0)]
+    [(cons fst _rems)
+     (cons (length lstlst) (length fst))]))
+
+(define (vector2d-dims vecvec)
+  (define m (vector-length vecvec))
+  (define n (if (= 0 m) 0 (vector-length (vector-ref vecvec 0))))
+  (cons m n))
+
+;; faster group-by for sorted list (increasing/decreasing)
+(define (group-by-sorted key lst [same? equal?])
+  (match (length lst)
+    [0 '()]
+    [1 (list lst)]
+    [_ (reverse
+         (map reverse
+              (for/fold ([res '()])
+                        ([p lst]
+                         [v (cdr lst)])
+                (match* [res (same? (key p) (key v))]
+                  [('() #t)
+                   (list (list v p))]
+                  [('() #f)
+                   (list (list v) (list p))]
+                  [((cons fst rem) #t)
+                   (cons (cons v fst) rem)]
+                  [(res #f)
+                   (cons (list v) res)]))))]))
+
+;; list->binary : binary-list -> integer
+;; binary-list : a list of number 0 or 1
+(define (list->binary lst)
+  (for/sum ([v lst]
+            [i (in-naturals 0)])
+    (* v (expt 2 i))))
+
+;; Return O(n^2) pairs of a list
+(define (pairs lst)
+  (let loop ([prev '()]
+             [lst lst]
+             [result '()])
+    (match* [prev lst]
+      [(_ '()) result]
+      [('() (cons cur rem))
+       (loop (cons cur prev) rem result)]
+      [(prev (cons cur rem))
+       (loop (cons cur prev) rem
+             (append (map (λ (p) (cons p cur)) prev) result))])))
+
+;; Return O(n^2) sublists of list `lst`
+(define (sublists lst)
+  (define (sublists-head lst)
+    (match lst
+      ['() '()]
+      [(cons x xs)
+       (cons (list x)
+             (map (λ (rem) (cons x rem)) (sublists-head xs)))]))
+
+  (match lst
+    ['() '()]
+    [(cons _ xs) (append (sublists-head lst) (sublists xs))]))
+
+(define (string-reverse str)
+  (list->string (reverse (string->list str))))
+
+(define (generate-primes limit)
+  (let ([table (make-vector (add1 limit) #t)])
+    (aset! table 0 #f)
+    (aset! table 1 #f)
+    (for ([i (in-range 2 (add1 limit))])
+      (when (aref table i)
+        (for ([j (in-range (* 2 i) (add1 limit) i)])
+          (aset! table j #f))))
+    (λ (i) (aref table i))))
+
+(define (abs-diff x y)
+  (abs (- x y)))
+
+(define (divisible x p)
+  (= 0 (modulo x p)))
+
+;; return a list a indexes `ans`, for each index `i`, `ans[i]` is the
+;; index of the previous element that satisfy
+;; `(pred (aref lst (aref ans i)) (aref lst i))`
+;; O(n)
+(define (find-prev lst pred)
+  (vec! lst)
+  (define ans (make-vector (alen lst) -1))
+
+  (for/fold ([stack '()])
+            ([(v i) (in-indexed lst)])
+    (define rems (or (memf (λ (j) (pred (aref lst j) v)) stack) '()))
+    (when (not (null? rems))
+      (aset! ans i (car rems)))
+    (cons i rems))
+
+  (vector->list ans))
+
+;; like `find-prev`, but the index is for the next element
+(define (find-next lst pred)
+  (define n (length lst))
+  (reverse (map (λ (i) (- n 1 i))
+                (find-prev (reverse lst) pred))))
+
+(define (boolean->number x)
+  (if x 1 0))
+
+;; return a function lcp.
+;; (lcp i) is the longest prefix substring which is also
+;; the suffix of substring str[0..i]
+(define (longest-common-prefix-function str)
+  (define n (string-length str))
+  (define prefix (make-vector n 0))
+  (for ([i (in-range 1 n)])
+    (let loop ([j (aref prefix (sub1 i))])
+      (cond [(char=? (sref str i) (sref str j))
+             (aset! prefix i (add1 j))]
+            [(= j 0)
+             (void)]
+            [else
+             (loop (aref prefix (sub1 j)))])))
+  (λ (i) (aref prefix i)))
+
+(define (identity-matrix n)
+  (for/vector ([i n])
+    (for/vector ([j n])
+      (if (= i j)
+          1
+          0))))
+
+(define (matrix/* mat1 mat2)
+  (define m (alen mat1))
+  (define n (alen mat2))
+  (for/vector ([i (in-range 0 m)])
+    (for/vector ([j (in-range 0 n)])
+      (for/sum ([k (in-range 0 n)])
+        (* (aref mat1 i k) (aref mat2 k j))))))
+
+(define (matrix-expmod mat p modfn)
+  (cond [(= p 0)
+         (identity-matrix (alen (aref mat 0)))]
+        [else
+         (define mat/2 (matrix-expmod mat (quotient p 2) modfn))
+         (define ans (if (odd? p)
+                         (matrix/* mat (matrix/* mat/2 mat/2))
+                         (matrix/* mat/2 mat/2)))
+         (for/vector ([row ans])
+           (for/vector ([v row])
+             (modfn v)))]))
+
+(define (sum lst)
+  (foldl + 0 lst))
+
+;; * Syntax
 
 ;; while loop
 (define-syntax-rule (while condition body ...)
@@ -757,20 +1117,45 @@
             args ...
     (max maxv last-expr)))
 
-(define-syntax-rule (for/min init-maximum-value args ... last-expr)
-  (for/fold ([mini init-maximum-value])
-            args ...
-    (min mini last-expr)))
-
 (define-syntax-rule (for*/max init-minimum-value args ... last-expr)
   (for*/fold ([maxv init-minimum-value])
              args ...
     (max maxv last-expr)))
 
+(define-syntax-rule (for/min init-maximum-value args ... last-expr)
+  (for/fold ([mini init-maximum-value])
+            args ...
+    (min mini last-expr)))
+
 (define-syntax-rule (for*/min init-maximum-value args ... last-expr)
   (for*/fold ([mini init-maximum-value])
              args ...
     (min mini last-expr)))
+
+(define-syntax-rule (for/count args ... last-expr)
+  (for/sum args ...
+    (if last-expr 1 0)))
+
+(define-syntax-rule (for*/count args ... last-expr)
+  (for*/sum args ...
+    (if last-expr 1 0)))
+
+;; as function
+
+;; make a function proxy for a vector or a hash table
+
+(define-syntax-parser as-function1!
+  [(_ (var:id args ...))
+   #'(set! var
+           (let ([old-var var])
+             (cond [(vector? old-var)
+                    (λ (args ...) (aref old-var args ...))]
+                   [(hash? old-var)
+                    (λ (x) (hash-ref old-var x))])))])
+
+(define-syntax-parse-rule (as-function! spec ...)
+  (let ()
+    (as-function1! spec) ...))
 
 ;; others
 
@@ -787,332 +1172,8 @@
               [(list? var) (list->vector var)]
               [else var])))
 
-;; other functions
-
-;; convert (vectorof (vectorof x)) to (listof (listof x))
-(define (vector2d->list2d mat)
-  (map vector->list (vector->list mat)))
-
-;; reverse function of `vector2d->list2d`
-(define (list2d->vector2d lst)
-  (list->vector (map list->vector lst)))
-
-;; list->hash : (listof pair) -> hash
-(define (list->hash lst)
-  (for/fold ([h (hash)])
-            ([pair lst])
-    (hash-set h (car pair) (cdr pair))))
-
-;; convert a sequence that can iterate with `for` to hash table counter
-(define (sequence->counter seq)
-  (for/fold ([h (make-hash)])
-            ([v seq])
-    (hash-update! h v add1 0)
-    h))
-
-(define (compare x y)
-  (cond [(= x y) '=]
-        [(< x y) '<]
-        [else '>]))
-
-;; some function with same length name
-(define nth0 car)
-(define nth1 cadr)
-(define nth2 caddr)
-
-(define (∈ x set) (set-member? set x))
-(define (∉ x set) (not (set-member? set x)))
-(define U set-union)
-(define ∩ set-intersect)
-
-;; make a alphabet list from lowercase a to z
-(define (alphabet)
-  (map integer->char
-       (inclusive-range (char->integer #\a) (char->integer #\z))))
-
-(define (list-sum lst)
-  (foldl + 0 lst))
-
-(define (list-product lst)
-  (foldl * 1 lst))
-
-(define (maximum lst)
-  (foldl max (car lst) lst))
-
-(define (minimum lst)
-  (foldl min (car lst) lst))
-
-(define (digit-char->integer c)
-  (- (char->integer c) (char->integer #\0)))
-
-(define (alphabet-char->integer c)
-  (- (char->integer c) (char->integer #\a)))
-
-(define (integer->alphabet-char i)
-  (integer->char (+ i (char->integer #\a))))
-
-(define (uppercase-char->integer c)
-  (- (char->integer c) (char->integer #\A)))
-
-(define (scanl proc init lst)
-  (for/list ([v lst])
-    (set! init (proc v init))
-    init))
-
-(define (scanr proc init lst)
-  (reverse
-    (for/list ([v (reverse lst)])
-      (set! init (proc v init))
-      init)))
-
-(define (sublist lst from to)
-  (drop (take lst to) from))
-
-(define (vector-reverse vec)
-  (list->vector (reverse (vector->list vec))))
-
-;; median of a sorted list
-;; O(1)
-(define (median sorted-lst)
-  (define vec (list->vector sorted-lst))
-  (define n (vector-length vec))
-  (vector-ref vec (quotient n 2)))
-
-;; ranges
-
-(define in-closed-range in-inclusive-range)
-
-(define in-rev-range
-  (case-lambda
-    [(from to) (in-range (sub1 to) (sub1 from) -1)]
-    [(from to delta) (in-range (- to delta) (- from delta) (- delta))]))
-
-(define in-closed-rev-range
-  (case-lambda
-    [(from to) (in-rev-range from (add1 to))]
-    [(from to delta) (in-rev-range from (+ to delta) delta)]))
-
-(define (string-ref-default str i default)
-  (if (< -1 i (string-length str))
-      (string-ref str i)
-      default))
-
-(define (sort< lst)
-  (sort lst <))
-
-(define (sort> lst)
-  (sort lst >))
-
-;; O(2^n * n)
-;; example: (in-producer (subsetof lst #f) #f)
-(define (subsetof lst stop)
-  (let* ([bits 0]
-         [n (length lst)]
-         [subset-size (expt 2 n)])
-    (lambda ()
-      (match bits
-        [(== subset-size) stop]
-        [_ (define res
-             (for/list ([i n]
-                        [val lst]
-                        #:when (bitwise-bit-set? bits i))
-               val))
-           (set! bits (add1 bits))
-           res]))))
-
-(define (set->immutable s)
-  (list->set (set->list s)))
-
-(define (list2d-dims lstlst)
-  (match lstlst
-    ['()
-     (cons 0 0)]
-    [(cons fst _rems)
-     (cons (length lstlst) (length fst))]))
-
-;; faster group-by for sorted list (increasing/decreasing)
-(define (group-by-sorted key lst [same? equal?])
-  (match (length lst)
-    [0 '()]
-    [1 (list lst)]
-    [_ (reverse
-         (map reverse
-              (for/fold ([res '()])
-                        ([p lst]
-                         [v (cdr lst)])
-                (match* [res (same? (key p) (key v))]
-                  [('() #t)
-                   (list (list v p))]
-                  [('() #f)
-                   (list (list v) (list p))]
-                  [((cons fst rem) #t)
-                   (cons (cons v fst) rem)]
-                  [(res #f)
-                   (cons (list v) res)]))))]))
-
 (define-syntax-parse-rule (sort! lst:id less-than?:expr args ...)
   (set! lst (sort lst less-than? args ...)))
-
-;; list->binary : binary-list -> integer
-;; binary-list : a list of number 0 or 1
-(define (list->binary lst)
-  (for/sum ([v lst]
-            [i (in-naturals 0)])
-    (* v (expt 2 i))))
-
-;; Return O(n^2) pairs of a list
-(define (pairs lst)
-  (let loop ([prev '()]
-             [lst lst]
-             [result '()])
-    (match* [prev lst]
-      [(_ '()) result]
-      [('() (cons cur rem))
-       (loop (cons cur prev) rem result)]
-      [(prev (cons cur rem))
-       (loop (cons cur prev) rem
-             (append (map (λ (p) (cons p cur)) prev) result))])))
-
-;; Return O(n^2) sublists of list `lst`
-(define (sublists lst)
-  (define (sublists-head lst)
-    (match lst
-      ['() '()]
-      [(cons x xs)
-       (cons (list x)
-             (map (λ (rem) (cons x rem)) (sublists-head xs)))]))
-
-  (match lst
-    ['() '()]
-    [(cons _ xs) (append (sublists-head lst) (sublists xs))]))
-
-
-(define (counter-add! cter val)
-  (hash-update! cter val add1 0))
-
-(define (counter-remove! cter val)
-  (hash-update! cter val sub1)
-  (when (= 0 (hash-ref cter val))
-    (hash-remove! cter val)))
-
-(define (string-reverse str)
-  (list->string (reverse (string->list str))))
-
-(define (bitcount x)
-  (for/sum ([i 64])
-    (if (bitwise-bit-set? x i) 1 0)))
-
-(define (generate-primes limit)
-  (let ([table (make-vector (add1 limit) #t)])
-    (aset! table 0 #f)
-    (aset! table 1 #f)
-    (for ([i (in-range 2 (add1 limit))])
-      (when (aref table i)
-        (for ([j (in-range (* 2 i) (add1 limit) i)])
-          (aset! table j #f))))
-    (λ (i) (aref table i))))
-
-(define (abs-diff x y)
-  (abs (- x y)))
-
-(define (divisible x p)
-  (= 0 (modulo x p)))
-
-;; return a list a indexes `ans`, for each index `i`, `ans[i]` is the
-;; index of the previous element that satisfy
-;; `(pred (aref lst (aref ans i)) (aref lst i))`
-;; O(n)
-(define (find-prev lst pred)
-  (vec! lst)
-  (define ans (make-vector (alen lst) -1))
-
-  (for/fold ([stack '()])
-            ([(v i) (in-indexed lst)])
-    (define rems (or (memf (λ (j) (pred (aref lst j) v)) stack) '()))
-    (when (not (null? rems))
-      (aset! ans i (car rems)))
-    (cons i rems))
-
-  (vector->list ans))
-
-;; like `find-prev`, but the index is for the next element
-(define (find-next lst pred)
-  (define n (length lst))
-  (reverse (map (λ (i) (- n 1 i))
-                (find-prev (reverse lst) pred))))
-
-(define (boolean->number x)
-  (if x 1 0))
-
-(define-syntax-parser as-function1!
-  [(_ (var:id args ...))
-   #'(set! var
-           (let ([old-var var])
-             (cond [(vector? old-var)
-                    (λ (args ...) (aref old-var args ...))]
-                   [(hash? old-var)
-                    (λ (x) (hash-ref old-var x))])))])
-
-(define-syntax-parse-rule (as-function! spec ...)
-  (let ()
-    (as-function1! spec) ...))
-
-;; return a function lcp.
-;; (lcp i) is the longest prefix substring which is also
-;; the suffix of substring str[0..i]
-(define (longest-common-prefix-function str)
-  (define n (string-length str))
-  (define prefix (make-vector n 0))
-  (for ([i (in-range 1 n)])
-    (let loop ([j (aref prefix (sub1 i))])
-      (cond [(char=? (sref str i) (sref str j))
-             (aset! prefix i (add1 j))]
-            [(= j 0)
-             (void)]
-            [else
-             (loop (aref prefix (sub1 j)))])))
-  (λ (i) (aref prefix i)))
-
-(define (identity-matrix n)
-  (for/vector ([i n])
-    (for/vector ([j n])
-      (if (= i j)
-          1
-          0))))
-
-(define (matrix/* mat1 mat2)
-  (define m (alen mat1))
-  (define n (alen mat2))
-  (for/vector ([i (in-range 0 m)])
-    (for/vector ([j (in-range 0 n)])
-      (for/sum ([k (in-range 0 n)])
-        (* (aref mat1 i k) (aref mat2 k j))))))
-
-(define (matrix-expmod mat p modfn)
-  (cond [(= p 0)
-         (identity-matrix (alen (aref mat 0)))]
-        [else
-         (define mat/2 (matrix-expmod mat (quotient p 2) modfn))
-         (define ans (if (odd? p)
-                         (matrix/* mat (matrix/* mat/2 mat/2))
-                         (matrix/* mat/2 mat/2)))
-         (for/vector ([row ans])
-           (for/vector ([v row])
-             (modfn v)))]))
-
-(define (sum lst)
-  (foldl + 0 lst))
-
-(define (bitwise-count-ones num)
-  (if (= num 0)
-      0
-      (add1 (bitwise-count-ones (bitwise-and num (sub1 num))))))
-
-(define heap-max heap-min)
-(define heap-remove-max! heap-remove-min!)
-
-(define (heap-empty? h)
-  (= 0 (heap-count h)))
 
 (provide (all-defined-out))
 
