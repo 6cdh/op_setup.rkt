@@ -403,28 +403,25 @@
         [else (bsearch-least (add1 m) r op)]))
 
 ;; dijkstra algorithm
-;; path-finding/dijkstra : (node, node, edgeof) -> (cons path cost)
-;; edgeof : node -> (listof (cons node cost))
-;; path : (listof node)
-;; cost : number
-;; node : any
-(define (path-finding/dijkstra s t edgeof)
+;; solve single source shortest path problem
+;; return the shortest distance hash table and
+;; the previous node hash table
+; graph/dijkstra : (node, edgeof) -> (list dist prev)
+; edgeof : node -> (listof (cons node cost))
+; node : any
+; cost : non-negative number
+; dist : (hash node cost)
+; prev : (hash node node)
+(define (graph/dijkstra s edgeof)
   (define dist (make-hash))
   (define prev (make-hash))
 
-  (define (build-path prev)
-    (define (rec node path)
-      (cond [(= node s) (cons s path)]
-            [else (rec (hash-ref prev node) (cons node path))]))
-
-    (rec t '()))
-
   (define (rec h)
-    (match-define (cons d closest) (heap-min h))
-    (heap-remove-min! h)
-    (cond [(equal? closest t)
-           (cons (build-path prev) d)]
+    (cond [(heap-empty? h)
+           (list dist prev)]
           [else
+           (match-define (cons d closest) (heap-min h))
+           (heap-remove-min! h)
            (for ([edge (edgeof closest)])
              (match-define (cons to cost) edge)
              (define d1 (+ d cost))
@@ -434,13 +431,29 @@
                (hash-set! prev to closest)
                (heap-add! h (cons d1 to))))
 
-           (if (zero? (heap-count h))
-               #f
-               (rec h))]))
+           (rec h)]))
 
   (define h (make-heap (λ (a b) (<= (car a) (car b)))))
   (heap-add! h (cons 0 s))
+  (hash-set! dist s 0)
   (rec h))
+
+;; find the shortest path from `s` to `t` and cost
+; graph/shortest : (node, node, edgeof) -> (list path cost)
+; edgeof : node -> (listof (cons node cost))
+; node : any
+; cost : non-negative number
+; path : (and (listof node) (= s (first path)) (= t (last path)))
+(define (graph/shortest s t edgeof)
+  (match-define (list dist prev) (graph/dijkstra s edgeof))
+
+  (define (build-path path)
+    (define node (first path))
+    (cond [(= node s) path]
+          [else (build-path (cons (hash-ref prev node) path))]))
+
+  (list (build-path (list t)) (hash-ref dist t)))
+
 
 ;; data structure helpers
 
