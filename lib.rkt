@@ -266,35 +266,38 @@
 ;; a simple abstraction of a bitset of a list
 
 (struct Bitset
-  (bits val->mask full)
+  (val->mask full)
   #:transparent)
 
-(define (make-bitset lst)
+(define (make-bitset lst [val->mask #f])
   (define h (make-hash))
   (for ([(v i) (in-indexed lst)])
     (hash-set! h v (expt 2 i)))
-  (Bitset 0 h (sub1 (expt 2 (length lst)))))
+  (Bitset (if (false? val->mask) (λ (val) (hash-ref h val)) val->mask)
+          (sub1 (expt 2 (length lst)))))
 
-(define (bitset-has? bs val)
-  (positive? (bitwise-and (Bitset-bits bs)
-                          (hash-ref (Bitset-val->mask bs) val))))
+(define (bitset-empty bs)
+  0)
 
-(define (bitset-empty? bs)
-  (zero? (Bitset-bits bs)))
+(define (bitset-has? bs bits val)
+  (positive? (bitwise-and bits
+                          ((Bitset-val->mask bs) val))))
 
-(define (bitset-full? bs)
-  (= (Bitset-bits bs) (Bitset-full bs)))
+(define (bitset-empty? bs bits)
+  (zero? bits))
 
-(define (bitset-add bs val)
+(define (bitset-full? bs bits)
+  (= bits (Bitset-full bs)))
+
+(define (bitset-add bs bits val)
   (match bs
-    [(Bitset bits val->mask full)
-     (Bitset (bitwise-ior bits (hash-ref val->mask val)) val->mask full)]))
+    [(Bitset val->mask full)
+     (bitwise-ior bits (val->mask val))]))
 
-(define (bitset-remove bs val)
+(define (bitset-remove bs bits val)
   (match bs
-    [(Bitset bits val->mask full)
-     (Bitset (bitwise-and bits (bitwise-not (hash-ref val->mask val)))
-             val->mask full)]))
+    [(Bitset val->mask full)
+     (bitwise-and bits (bitwise-not (val->mask val)))]))
 
 ;; ** MultiSet
 
@@ -688,7 +691,7 @@
 (define (vector2d-dims vecvec)
   (define m (vector-length vecvec))
   (define n (if (= 0 m) 0 (vector-length (vector-ref vecvec 0))))
-  (cons m n))
+  (values m n))
 
 ;; faster group-by for sorted list (increasing/decreasing)
 (define (group-by-sorted key lst [same? equal?])
