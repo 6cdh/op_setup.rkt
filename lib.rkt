@@ -459,6 +459,38 @@
 
 ;; ** Graph
 
+;; build graph
+
+(define (undir-edges->graph edges)
+  (define g (make-hash))
+  (for ([e edges])
+    (match e
+      [(list u v)
+       (hash-update! g u (λ (old) (cons v old)) '())
+       (hash-update! g v (λ (old) (cons u old)) '())]))
+  g)
+
+(define (dir-edges->graph edges)
+  (define g (make-hash))
+  (for ([e edges])
+    (match e
+      [(list u v)
+       (hash-update! g u (λ (old) (cons v old)) '())]))
+  g)
+
+(define (undir-edges->tree edges root from)
+  (define g (undir-edges->graph edges))
+  (define tree-edges '())
+
+  (define (go root from)
+    (for ([c (hash-ref g root '())]
+          #:when (not (equal? c from)))
+      (set! tree-edges (cons (list root c) tree-edges))
+      (go c root)))
+
+  (go root from)
+  (dir-edges->graph tree-edges))
+
 ;; dijkstra algorithm
 ;; solve single source shortest path problem
 ;; return the shortest distance hash table and
