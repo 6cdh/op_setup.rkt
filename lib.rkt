@@ -981,7 +981,7 @@
     dispatch))
 
 ;; statistic function `fn`
-;; use `(fn 'query)` to print the results
+;; use `(fn 'log)` to print the results
 (define-syntax-rule (statistic! fn)
   (set! fn (statistic (quote fn) fn)))
 
