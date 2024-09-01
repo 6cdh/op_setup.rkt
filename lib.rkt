@@ -27,9 +27,13 @@
 ;; ** Others
 ;; * Syntax
 
-;; performance note:
+;; Implementation Performance Note:
 ;; * use pair instead of 2 element list
 ;; * use (cons x y) not (list x y ...) in pattern match
+;; * use mutable hashtable instead of immutable hashtable or set
+
+;; Design
+;; * use values to return multiple values
 
 ;; requires
 
@@ -45,9 +49,9 @@
 
 ;; ** Helpers
 
+(define slen string-length)
 (define alen vector-length)
 (define sref string-ref)
-(define slen string-length)
 
 ;; ** Multidimensional Array
 
@@ -91,6 +95,9 @@
     (aset! arr dims2 ... t)))
 
 ;; ** Fenwick Tree
+;; Fenwick tree provides a vector abstraction, and
+;; O(log n) update
+;; O(log n) range sum query
 
 ;; make a fenwick tree with (range 0 n)
 ;; O(n)
@@ -105,7 +112,7 @@
       (aupd! fenwick-tree i (λ (x) (+ x delta)))
       (loop (bs-set-lowest-zero-to-one i)))))
 
-;; (sum (sublist fenwick-tree (range i j)))
+;; query the sum of (range i j)
 ;; O(log n)
 (define (ft-sum fenwick-tree i j)
   (let loop ([sum 0]
@@ -134,8 +141,13 @@
 (define (tree1-right k)
   (add1 (* 2 k)))
 
+(define (tree1-sibling k)
+  (bitwise-xor k 1))
+
+; root is 0
+
 (define (tree0-father k)
-  (sub1 (quotient k 2)))
+  (quotient (sub1 k) 2))
 
 (define (tree0-left k)
   (+ (* 2 k) 1))
@@ -143,10 +155,11 @@
 (define (tree0-right k)
   (+ (* 2 k) 2))
 
-(define (tree1-sibling k)
-  (bitwise-xor k 1))
-
 ;; ** Segment Tree
+;; Segment Tree provide a vector abstraction, and
+;; O(log n) range sum query (allows a custom operation
+;;          and extends to maximum, minimum, etc query)
+;; O(log n) update
 
 ;; the lowest layer of the segment tree is the minimum power of 2
 ;; that is not less than `len`
@@ -184,11 +197,17 @@
 
 
 ;; ** Disjoint Set
+;; Initially, every element is in its own set
+;; union! operation merge two set into a larger set
+;; rootof operation query the root of the set of a given element
+;;                  or which set it belongs to
 
 ;; make disjoint set of (range 0 n)
+;; O(n)
 (define (make-dsu n)
   (build-vector n values))
 
+;; almost constant complexity
 (define (dsu-rootof dsu x)
   (match (aref dsu x)
     [(== x) x]
@@ -196,6 +215,7 @@
           (aset! dsu x r)
           r)]))
 
+;; almost constant complexity
 (define (dsu-union! dsu a b)
   (aset! dsu (dsu-rootof dsu a) (dsu-rootof dsu b)))
 
@@ -208,8 +228,8 @@
 (struct SBST
   (keys vals none))
 
-(define (make-sbst lst none)
-  (define keys (list->vector lst))
+(define (make-sbst sorted-lst none)
+  (define keys (list->vector sorted-lst))
   (SBST keys (make-vector (vector-length keys) none) none))
 
 (define (sbst-search-index sbst key)
@@ -436,7 +456,8 @@
 
 ;; ** Count Inversion
 
-;; count-inversions : (fenwick-tree, (listof number)) -> non-negative-integer
+;; count-inversions : (fenwick-tree, (listof number)) -> natural-number
+;; count inversions of the fenwick tree
 ;; O(n log n)
 (define (count-inversions fenwick-tree lst)
   (let* ([n (vector-length fenwick-tree)]
@@ -450,32 +471,48 @@
 
 ;; ** Binary Search
 
+;; bsearch-least: (number, number, (number -> bool)) -> number
 ;; binary search the first element that meets `op`
-(define (bsearch-least l r op)
-  (define m (quotient (+ l r) 2))
-  (cond [(= l r) l]
-        [(op m) (bsearch-least l m op)]
-        [else (bsearch-least (add1 m) r op)]))
+;; Requires:
+;; If search on a vector, there should be a
+;; index i so for every j < i, (op j) is false,
+;; for k >= i, (op k) is true. Then this function
+;; returns i.
+;; returns #f if not found.
+(define (bsearch-least left right op)
+  (let loop ([l left]
+             [r right])
+    (define m (quotient (+ l r) 2))
+    (cond [(= l r) (if (op l) l #f)]
+          [(op m) (loop l m)]
+          [else (loop (add1 m) r)])))
 
 ;; ** Graph
+
+(define (make-graph)
+  (make-hash))
+
+(define (graph-add-dir-edge! g from to)
+  (hash-update! g from (λ (old) (cons to old)) '()))
+
+(define (graph-add-undir-edge! g u v)
+  (graph-add-dir-edge! g u v)
+  (graph-add-dir-edge! g v u))
 
 ;; build graph
 
 (define (undir-edges->graph edges)
-  (define g (make-hash))
+  (define g (make-graph))
   (for ([e edges])
     (match e
-      [(list u v)
-       (hash-update! g u (λ (old) (cons v old)) '())
-       (hash-update! g v (λ (old) (cons u old)) '())]))
+      [(list u v) (graph-add-undir-edge! g u v)]))
   g)
 
 (define (dir-edges->graph edges)
   (define g (make-hash))
   (for ([e edges])
     (match e
-      [(list u v)
-       (hash-update! g u (λ (old) (cons v old)) '())]))
+      [(list u v) (graph-add-dir-edge! g u v)]))
   g)
 
 (define (undir-edges->tree edges root from)
@@ -600,6 +637,9 @@
 (define (list2d->vector2d lst)
   (list->vector (map list->vector lst)))
 
+(define (transpose lstlst)
+  (apply map list lstlst))
+
 ;; list->hash : (listof pair) -> hash
 (define (list->hash lst)
   (for/fold ([h (hash)])
@@ -633,10 +673,13 @@
   (map integer->char
        (inclusive-range (char->integer #\a) (char->integer #\z))))
 
-(define (list-sum lst)
+(define-syntax-rule (cons! lst element)
+  (set! lst (cons element lst)))
+
+(define (sum lst)
   (foldl + 0 lst))
 
-(define (list-product lst)
+(define (product lst)
   (foldl * 1 lst))
 
 (define (maximum lst)
@@ -648,10 +691,10 @@
 (define (digit-char->integer c)
   (- (char->integer c) (char->integer #\0)))
 
-(define (alphabet-char->integer c)
+(define (lower-char->integer c)
   (- (char->integer c) (char->integer #\a)))
 
-(define (integer->alphabet-char i)
+(define (integer->lower-char i)
   (integer->char (+ i (char->integer #\a))))
 
 (define (uppercase-char->integer c)
@@ -694,6 +737,7 @@
 
 ;; O(2^n * n) in total
 ;; example: (in-subset lst #f)
+;; iterate all subsets of list `lst`
 (define (in-subset lst stop)
   (let* ([bits 0]
          [n (length lst)]
@@ -716,9 +760,9 @@
 (define (list2d-dims lstlst)
   (match lstlst
     ['()
-     (cons 0 0)]
+     (values 0 0)]
     [(cons fst _rems)
-     (cons (length lstlst) (length fst))]))
+     (values (length lstlst) (length fst))]))
 
 (define (vector2d-dims vecvec)
   (define m (vector-length vecvec))
@@ -752,18 +796,18 @@
             [i (in-naturals 0)])
     (* v (expt 2 i))))
 
+;; binary->list integer -> binary-list
+(define (binary->list bin bits)
+  (for/list ([i bits])
+    (if (bitwise-bit-set? bin i) 1 0)))
+
 ;; Return O(n^2) pairs of a list
 (define (pairs lst)
-  (let loop ([prev '()]
-             [lst lst]
-             [result '()])
-    (match* [prev lst]
-      [(_ '()) result]
-      [('() (cons cur rem))
-       (loop (cons cur prev) rem result)]
-      [(prev (cons cur rem))
-       (loop (cons cur prev) rem
-             (append (map (λ (p) (cons p cur)) prev) result))])))
+  (define vec (list->vector lst))
+  (define n (vector-length vec))
+  (for*/list ([j n]
+              [i j])
+    (cons (vector-ref vec i) (vector-ref vec j))))
 
 ;; Return O(n^2) sublists of list `lst`
 (define (sublists lst)
@@ -781,7 +825,7 @@
 (define (string-reverse str)
   (list->string (reverse (string->list str))))
 
-(define (generate-primes limit)
+(define (generate-prime-table limit)
   (let ([table (make-vector (add1 limit) #t)])
     (aset! table 0 #f)
     (aset! table 1 #f)
@@ -842,9 +886,7 @@
 (define (identity-matrix n)
   (for/vector ([i n])
     (for/vector ([j n])
-      (if (= i j)
-          1
-          0))))
+      (if (= i j) 1 0))))
 
 (define (matrix/* mat1 mat2)
   (define m (alen mat1))
@@ -854,6 +896,9 @@
       (for/sum ([k (in-range 0 n)])
         (* (aref mat1 i k) (aref mat2 k j))))))
 
+;; O(log n) matrix exponent operation
+;; unsually used in some algorithms like
+;; O(log n) fibonacci function.
 (define (matrix-expmod mat p modfn)
   (cond [(= p 0)
          (identity-matrix (alen (aref mat 0)))]
@@ -865,9 +910,6 @@
          (for/vector ([row ans])
            (for/vector ([v row])
              (modfn v)))]))
-
-(define (sum lst)
-  (foldl + 0 lst))
 
 ;; * Syntax
 
@@ -920,7 +962,7 @@
   (set! fn (cachef-hash fn)))
 
 ;; (cachef-vec! function-name dims ... not-exist-value)
-;; Then it would use vector for cache.
+;; use vector for cache.
 ;; dims are number or expression that evaluate to number
 ;; not-exist-value is the value that indicate that the
 ;; key-value pair is not exist.
@@ -1194,19 +1236,25 @@
 
 ;; others
 
+;; update a variable with a updater
+;; (upd! num add1) is a shorthand for (set! num (add1 num))
 (define-syntax-parse-rule (upd! var:id updater)
   (set! var (updater var)))
 
+;; like vec1! but for multiple variables
 (define-syntax-parse-rule (vec! var:id ...)
   (let ()
     (vec1! var) ...))
 
+;; convert a string or list into a vector, and reuse the variable name
+;; (vec1! lst)
 (define-syntax-parse-rule (vec1! var:id)
   (set! var
         (cond [(string? var) (list->vector (string->list var))]
               [(list? var) (list->vector var)]
               [else var])))
 
+;; sort a list and reuse the variable name
 (define-syntax-parse-rule (sort! lst:id less-than?:expr args ...)
   (set! lst (sort lst less-than? args ...)))
 
