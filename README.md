@@ -18,6 +18,7 @@ In this way, you can write code without manually write or copy code from your li
 - A tool for copying to the clipboard
   - wl-clipboard on Wayland
   - xclip on X11
+  - Windows WSL is supported
 
 Other platforms are not supported because I don't use them and can't test it. Feel free to open a issue if you have suggestion for other platforms.
 
