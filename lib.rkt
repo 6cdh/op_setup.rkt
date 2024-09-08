@@ -24,6 +24,7 @@
 ;; * Functional
 ;; ** Range
 ;; ** Bitwise
+;; ** Points
 ;; ** Others
 ;; * Syntax
 
@@ -52,6 +53,12 @@
 (define slen string-length)
 (define alen vector-length)
 (define sref string-ref)
+
+;; ** Performance
+
+(define first car)
+(define second cadr)
+(define third caddr)
 
 ;; ** Multidimensional Array
 
@@ -285,39 +292,31 @@
 
 ;; a simple abstraction of a bitset of a list
 
-(struct Bitset
-  (val->mask full)
-  #:transparent)
+(define (full-bitset lst)
+  (sub1 (expt 2 (length lst))))
 
-(define (make-bitset lst [val->mask #f])
-  (define h (make-hash))
-  (for ([(v i) (in-indexed lst)])
-    (hash-set! h v (expt 2 i)))
-  (Bitset (if (false? val->mask) (λ (val) (hash-ref h val)) val->mask)
-          (sub1 (expt 2 (length lst)))))
-
-(define (bitset-empty bs)
+(define (empty-bitset)
   0)
 
-(define (bitset-has? bs bits val)
-  (positive? (bitwise-and bits
-                          ((Bitset-val->mask bs) val))))
+(define (bitset-has? bits val)
+  (positive? (bitwise-and bits (expt 2 val))))
 
-(define (bitset-empty? bs bits)
+(define (bitset-empty? bits)
   (zero? bits))
 
 (define (bitset-full? bs bits)
-  (= bits (Bitset-full bs)))
+  (= bits bs))
 
-(define (bitset-add bs bits val)
-  (match bs
-    [(Bitset val->mask full)
-     (bitwise-ior bits (val->mask val))]))
+(define (bitset-add bits val)
+  (bitwise-ior bits (expt 2 val)))
 
-(define (bitset-remove bs bits val)
-  (match bs
-    [(Bitset val->mask full)
-     (bitwise-and bits (bitwise-not (val->mask val)))]))
+(define (bitset-remove bits val)
+  (bitwise-and bits (bitwise-not (expt 2 val))))
+
+(define (bitset-count bits)
+  (if (zero? bits)
+      0
+      (add1 (bitset-count (bitwise-and bits (sub1 bits))))))
 
 ;; ** MultiSet
 
@@ -580,6 +579,23 @@
 
   (list (build-path (list t)) (hash-ref dist t)))
 
+(define (bfs starts edgeof)
+  (define dist (make-hash))
+
+  (define (loop nodes steps)
+    (define new-nodes
+      (for*/list ([node nodes]
+                  [nei (edgeof node)]
+                  #:when (not (hash-has-key? dist nei)))
+        (hash-set! dist nei (add1 steps))
+        nei))
+
+    (when (not (null? new-nodes))
+      (loop new-nodes (add1 steps))))
+
+  (loop starts 0)
+  dist)
+
 ;; * Functional
 
 ;; ** Bitwise
@@ -626,6 +642,22 @@
   (case-lambda
     [(from to) (in-rev-range from (add1 to))]
     [(from to delta) (in-rev-range from (+ to delta) delta)]))
+
+;; ** Points
+
+(define Point cons)
+
+(define (list->point lst)
+  (Point (first lst) (second lst)))
+
+(define (point-map fn p1 p2)
+  (Point (fn (car p1) (car p2))
+         (fn (cdr p1) (cdr p2))))
+
+;; convert a list of points (2 elements list) into
+;; a list of pairs
+(define (points->pairs lst)
+  (map list->point lst))
 
 ;; ** Others
 
@@ -1033,14 +1065,23 @@
         [res-set (mutable-set)]
         [cpu-time 0]
         [real-time 0]
-        [gc-time 0])
+        [gc-time 0]
+        [max-rec-depth 0]
+        [rec-depth 0])
     (define (call args)
       (set-add! arg-set args)
       (set! cnt (add1 cnt))
-      (define-values (results cput realt gct) (time-apply fn args))
-      (set! cpu-time (+ cpu-time cput))
-      (set! real-time (+ real-time realt))
-      (set! gc-time (+ gc-time gct))
+
+      (set! rec-depth (add1 rec-depth))
+      (set! max-rec-depth (max max-rec-depth rec-depth))
+      (define-values (results cput realt gct)
+        (time-apply fn args))
+      (set! rec-depth (sub1 rec-depth))
+
+      (when (zero? rec-depth)
+        (set! cpu-time (+ cpu-time cput))
+        (set! real-time (+ real-time realt))
+        (set! gc-time (+ gc-time gct)))
       (set-add! res-set results)
       (apply values results))
 
@@ -1051,6 +1092,7 @@
          (displayln (format "    ~a distinct arguments" (set-count arg-set)))
          (displayln (format "    ~a distinct results" (set-count res-set)))
          (displayln (format "    ~a calls" cnt))
+         (displayln (format "    ~a max recursion depth" max-rec-depth))
          (displayln (format "    ~a ms cpu time" cpu-time))
          (displayln (format "    ~a ms real time" real-time))
          (displayln (format "    ~a ms gc time" gc-time))]

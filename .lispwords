@@ -6,3 +6,4 @@
 (for/count 1)
 (test-case 1)
 (type-case 1)
+(bsearch-least 2)
