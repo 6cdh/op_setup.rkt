@@ -33,11 +33,12 @@ Other platforms are not supported because I don't use them and can't test it. Fe
 `lib.rkt` contains functions that some of them may attract you use Racket (or a lisp) on online programming platform:
 
 - shorter and convenient multi-dimension vector utilities that are compatible with existing vector functions: `make-array`, `aset!`, `aref`, `aupd!`, ...
-- debug macros that print expression and its value: `debugv`
-- debug macros that hijack a function then print input/output/recursive calls: `debugf!`
-- cache macros that hijack and automatically cache a recursive function use hash table, or a vector for premature optimization if you provide enough hints: `cachef!`
-- assert macro so you can place it somewhere to make sure your code are correct: `assert`
-- counter macro that hijack a function, and record the number of calls and return it when you need: `log-call-times!`
-- threading macro: `~>`
-- modulo macro that modulo nested expression: `lc-mod`
+- debug macros that print expression and its value: `debugv`.
+- debug macros that hijack a function then print input/output/recursive calls: `debugf!`.
+- cache macros that hijack and automatically cache a recursive function use hash table, or a vector for premature optimization if you provide enough hints: `cachef!` and `cachef-vec!`.
+- assert macro so you can place it somewhere to make sure your code are correct: `assert`.
+- counter macro that hijack a function, and record the number of calls and return it when you need: `log-call-times!`.
+- threading macro: `~>`.
+- modulo macro that modulo nested expression: `lc-mod`.
 - `C` macro that provide part of C like language experience, support nested infix expression, convenient bitwise operation operator, C style assignment.
+- hijack macro that wraps a function, record the number of calls, max recursion depth, the number of distinct arguments, cpu time and gc time of this function: `statistic!`.
