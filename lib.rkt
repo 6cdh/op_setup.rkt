@@ -15,6 +15,7 @@
 ;; ** Lazy Heap
 ;; ** Skip List
 ;; ** Counter
+;; ** Trie
 ;; * Algorithm
 ;; ** Range Sum
 ;; ** Expmod
@@ -45,6 +46,7 @@
 (require racket/sandbox)
 (require (rename-in racket/unsafe/ops
                     [unsafe-fxquotient quotient]))
+(require racket/fixnum)
 
 ;; * Data structure
 
@@ -424,6 +426,32 @@
   (when (= 0 (hash-ref cter val))
     (hash-remove! cter val)))
 
+;; ** Trie
+
+;; only for lowercase characters
+
+(define (make-trie)
+  (make-vector 26 #f))
+
+(define (trie-add! alphabet str)
+  (for/fold ([ab alphabet])
+            ([c str])
+    (define x (lower-char->integer c))
+    (when (false? (vector-ref ab x))
+      (vector-set! ab x (make-trie)))
+    (vector-ref ab x)))
+
+(define (trie-longest-prefix-len trie str [start 0] [end (string-length str)])
+  (define ab trie)
+  (define unmatch-idx
+    (or (for*/first ([i (in-range start end)]
+                     [x (in-value (lower-char->integer (string-ref str i)))]
+                     #:when (let ()
+                              (set! ab (vector-ref ab x))
+                              (false? ab)))
+          i)
+        end))
+  (- unmatch-idx start))
 
 ;; * Algorithm
 
@@ -650,6 +678,9 @@
 (define (list->point lst)
   (Point (first lst) (second lst)))
 
+(define point-x car)
+(define point-y cdr)
+
 (define (point-map fn p1 p2)
   (Point (fn (car p1) (car p2))
          (fn (cdr p1) (cdr p2))))
@@ -733,9 +764,10 @@
   (- (char->integer c) (char->integer #\A)))
 
 (define (scanl proc init lst)
-  (for/list ([v lst])
-    (set! init (proc v init))
-    init))
+  (cons init
+        (for/list ([v lst])
+          (set! init (proc v init))
+          init)))
 
 (define (scanr proc init lst)
   (reverse
@@ -993,6 +1025,14 @@
 (define-syntax-parse-rule (cachef! fn:id)
   (set! fn (cachef-hash fn)))
 
+;; return a hash table cached version of function `fn`
+(define (cachef-hash fn)
+  (let ([cache (make-hash)])
+    (lambda args
+      (when (not (hash-has-key? cache args))
+        (hash-set! cache args (apply fn args)))
+      (hash-ref cache args))))
+
 ;; (cachef-vec! function-name dims ... not-exist-value)
 ;; use vector for cache.
 ;; dims are number or expression that evaluate to number
@@ -1004,24 +1044,76 @@
 (define-syntax-parser cachef-vec
   [(_ fn:id hints:expr ... init)
    (with-syntax ([(args ...) (generate-temporaries #'(hints ...))])
-     #'(let* ([cache (make-array hints ... init)]
+     #'(let* ([cache (make-array (* hints ...) init)]
               [ori-fn fn])
+         (define hs (list hints ...))
+         (define dims
+           (cdr (reverse (scanl * 1 (reverse hs)))))
+
+         (define (args->index . ps)
+           (for/sum ([p ps]
+                     [d dims])
+             (* p d)))
+
          (lambda (args ...)
            (cond [(or (< args 0) ...
                       (>= args hints) ...)
                   (ori-fn args ...)]
                  [else
-                  (when (equal? init (aref cache args ...))
-                    (aset! cache args ... (ori-fn args ...)))
-                  (aref cache args ...)]))))])
+                  (define index (args->index args ...))
+                  (when (equal? init (aref cache index))
+                    (aset! cache index (ori-fn args ...)))
+                  (aref cache index)]))))])
 
-;; return a hash table cached version of function `fn`
-(define (cachef-hash fn)
-  (let ([cache (make-hash)])
+;; (cachef-opt! function-name dims ... not-exist-value)
+;; fully optimized cache function
+;; the function arguments should be non-negative numbers,
+;; the return value should be fixnum.
+(define-syntax-parse-rule (cachef-opt! fn:id hints:expr ... init)
+  (set! fn (cachef-opt fn hints ... init)))
+
+(define-syntax-parser cachef-opt
+  [(_ fn:id hints:expr ... init)
+   (with-syntax ([(args ...) (generate-temporaries #'(hints ...))])
+     #'(let* ([cache (make-fxvector (* hints ...) init)]
+              [ori-fn fn])
+         (define hs (list hints ...))
+         (define dims
+           (cdr (reverse (scanl * 1 (reverse hs)))))
+
+         (define (args->index . ps)
+           (for/sum ([p ps]
+                     [d dims])
+             (* p d)))
+
+         (lambda (args ...)
+           (define index (args->index args ...))
+           (when (equal? init (fxvector-ref cache index))
+             (fxvector-set! cache index (ori-fn args ...)))
+           (fxvector-ref cache index))))])
+
+(define-syntax-rule (run-once! fn)
+  (set! fn (run-once fn)))
+
+(define (run-once fn)
+  (let ([has (mutable-set)])
     (lambda args
-      (when (not (hash-has-key? cache args))
-        (hash-set! cache args (apply fn args)))
-      (hash-ref cache args))))
+      (when (not (set-member? has args))
+        (set-add! has args)
+        (apply fn args)))))
+
+(define-syntax-parse-rule (run-once-vec! fn:id hints:expr ...)
+  (set! fn (run-once-vec fn hints ...)))
+
+(define-syntax-parser run-once-vec
+  [(_ fn:id hints:expr ...)
+   (with-syntax ([(args ...) (generate-temporaries #'(hints ...))])
+     #'(let* ([cache (make-array hints ... #f)]
+              [ori-fn fn])
+         (lambda (args ...)
+           (when (eq? #f (aref cache args ...))
+             (aset! cache args ... #t)
+             (ori-fn args ...)))))])
 
 ;; (timeout time expr)
 ;; limit the expr runs complete in `time` seconds
