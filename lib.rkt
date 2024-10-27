@@ -4,18 +4,18 @@
 ;; * Data structure
 ;; ** Helpers
 ;; ** Multidimensional Array
+;; ** Flattened Multidimensional Array
 ;; ** Fenwick Tree
 ;; ** Array representation of Binary Tree
 ;; ** Segment Tree
 ;; ** Disjoint Set
 ;; ** Static BST
-;; ** Fast Set
 ;; ** BitSet
-;; ** MultiSet
 ;; ** Lazy Heap
 ;; ** Skip List
 ;; ** Counter
 ;; ** Trie
+;; ** Char Table
 ;; * Algorithm
 ;; ** Range Sum
 ;; ** Expmod
@@ -53,7 +53,7 @@
 ;; ** Helpers
 
 (define slen string-length)
-(define alen vector-length)
+(define vlen vector-length)
 (define sref string-ref)
 
 ;; ** Performance
@@ -102,6 +102,31 @@
   (let ([t (aref arr dims1 ...)])
     (aset! arr dims1 ... (aref arr dims2 ...))
     (aset! arr dims2 ... t)))
+
+;; ** Flattened Multidimensional Array
+
+(struct FlattenedArray
+  (vec ds))
+
+(define (farray/args->index fa dims)
+  (for/sum ([d dims]
+            [w (FlattenedArray-ds fa)])
+    (* d w)))
+
+(define (make-farray dims init)
+  (define ds (cdr (reverse (scanl * 1 (reverse dims)))))
+  (FlattenedArray (make-vector (product dims) init) ds))
+
+(define (farray-ref fa dims)
+  (vector-ref (FlattenedArray-vec fa) (farray/args->index fa dims)))
+
+(define (farray-set! fa dims val)
+  (vector-set! (FlattenedArray-vec fa) (farray/args->index fa dims) val))
+
+(define (farray-update! fa dims updater)
+  (define vec (FlattenedArray-vec fa))
+  (define index (farray/args->index fa dims))
+  (vector-set! vec index (updater (vector-ref vec index))))
 
 ;; ** Fenwick Tree
 ;; Fenwick tree provides a vector abstraction, and
@@ -268,28 +293,6 @@
 (define (sbst-update! sbst key updater default)
   (sbst-set! sbst key (updater (sbst-ref sbst key default))))
 
-;; ** Fast Set
-
-;; it uses mutable hashtable as a faster replacement of set
-
-(define (make-fset)
-  (make-hash))
-
-(define (fset-has? fs v)
-  (hash-has-key? fs v))
-
-(define (fset-add! fs v)
-  (hash-set! fs v #t))
-
-(define (fset-remove! fs v)
-  (hash-remove! fs v))
-
-(define (list->fset lst)
-  (for/fold ([fs (make-fset)])
-            ([v lst])
-    (fset-add! fs v)
-    fs))
-
 ;; ** BitSet
 
 ;; a simple abstraction of a bitset of a list
@@ -320,33 +323,6 @@
       0
       (add1 (bitset-count (bitwise-and bits (sub1 bits))))))
 
-;; ** MultiSet
-
-;; a set can contains duplicate elements
-
-(define (make-multiset)
-  (make-adjustable-skip-list))
-
-(define (multiset-add! mset val)
-  (skip-list-update! mset val add1 0))
-
-(define (multiset-remove! mset val)
-  (skip-list-update! mset val sub1 1)
-  (when (= 0 (skip-list-ref mset val))
-    (skip-list-remove! mset val)))
-
-(define (multiset-minimum mset)
-  (define it (skip-list-iterate-first mset))
-  (if it
-      (skip-list-iterate-key mset it)
-      #f))
-
-(define (multiset-maximum mset)
-  (define it (skip-list-iterate-greatest/<=? mset +inf.0))
-  (if it
-      (skip-list-iterate-key mset it)
-      #f))
-
 ;; ** Heap
 
 (define heap-max heap-min)
@@ -358,11 +334,9 @@
 ;; ** Lazy Heap
 
 ;; provide O(log n) lazy delete compared normal heap O(n) delete.
-;; an faster alternative to multiset
 
 (struct LazyHeap
-  [deleted
-   heap])
+  [deleted heap])
 
 (define (make-lazyheap <=)
   (LazyHeap (make-hash) (make-heap <=)))
@@ -410,13 +384,17 @@
 
 ;; ** Counter
 
+;; convert a sequence that can iterate with `for` to hash table counter
+(define (sequence->counter seq)
+  (for/fold ([h (make-hash)])
+            ([v seq])
+    (counter-add! h v)
+    h))
+
 (define (make-counter [seq #f])
   (if (false? seq)
       (make-hash)
-      (for/fold ([h (make-hash)])
-                ([v seq])
-        (counter-add! h v)
-        h)))
+      (sequence->counter seq)))
 
 (define (counter-add! cter val)
   (hash-update! cter val add1 0))
@@ -452,6 +430,26 @@
           i)
         end))
   (- unmatch-idx start))
+
+;; ** Char Table
+
+(define (make-char-table)
+  (make-fxvector 256 0))
+
+(define (char-table-ref abt c)
+  (fxvector-ref abt (char->integer c)))
+
+(define (char-table-add! abt c)
+  (define i (char->integer c))
+  (fxvector-set! abt i (add1 (fxvector-ref abt i))))
+
+(define (char-table-remove! abt c)
+  (define i (char->integer c))
+  (fxvector-set! abt i (sub1 (fxvector-ref abt i))))
+
+(define (char-table-update! abt c updater)
+  (define i (char->integer c))
+  (fxvector-set! abt i (updater (fxvector-ref abt i))))
 
 ;; * Algorithm
 
@@ -653,23 +651,17 @@
       0
       (add1 (bs-count-ones (bitwise-and num (sub1 num))))))
 
-(define (bitcount x)
-  (for/sum ([i 64])
-    (if (bitwise-bit-set? x i) 1 0)))
-
 ;; ** Range
 
-(define in-closed-range in-inclusive-range)
-
-(define in-rev-range
+(define in-reverse-range
   (case-lambda
     [(from to) (in-range (sub1 to) (sub1 from) -1)]
     [(from to delta) (in-range (- to delta) (- from delta) (- delta))]))
 
-(define in-closed-rev-range
+(define in-inclusive-reverse-range
   (case-lambda
-    [(from to) (in-rev-range from (add1 to))]
-    [(from to delta) (in-rev-range from (+ to delta) delta)]))
+    [(from to) (in-reverse-range from (add1 to))]
+    [(from to delta) (in-reverse-range from (+ to delta) delta)]))
 
 ;; ** Points
 
@@ -709,27 +701,10 @@
             ([pair lst])
     (hash-set h (car pair) (cdr pair))))
 
-;; convert a sequence that can iterate with `for` to hash table counter
-(define (sequence->counter seq)
-  (for/fold ([h (make-hash)])
-            ([v seq])
-    (hash-update! h v add1 0)
-    h))
-
 (define (compare x y)
   (cond [(= x y) '=]
         [(< x y) '<]
         [else '>]))
-
-;; some function with same length name
-(define nth0 car)
-(define nth1 cadr)
-(define nth2 caddr)
-
-(define (∈ x set) (set-member? set x))
-(define (∉ x set) (not (set-member? set x)))
-(define U set-union)
-(define ∩ set-intersect)
 
 ;; make a alphabet list from lowercase a to z
 (define (alphabet)
@@ -788,17 +763,6 @@
   (define n (vector-length vec))
   (vector-ref vec (quotient n 2)))
 
-(define (string-ref-default str i default)
-  (if (< -1 i (string-length str))
-      (string-ref str i)
-      default))
-
-(define (sort< lst)
-  (sort lst <))
-
-(define (sort> lst)
-  (sort lst >))
-
 ;; O(2^n * n) in total
 ;; example: (in-subset lst #f)
 ;; iterate all subsets of list `lst`
@@ -834,7 +798,7 @@
   (values m n))
 
 ;; faster group-by for sorted list (increasing/decreasing)
-(define (group-by-sorted key lst [same? equal?])
+(define (group-by-consecutive key lst [same? equal?])
   (match (length lst)
     [0 '()]
     [1 (list lst)]
@@ -852,18 +816,6 @@
                    (cons (cons v fst) rem)]
                   [(res #f)
                    (cons (list v) res)]))))]))
-
-;; list->binary : binary-list -> integer
-;; binary-list : a list of number 0 or 1
-(define (list->binary lst)
-  (for/sum ([v lst]
-            [i (in-naturals 0)])
-    (* v (expt 2 i))))
-
-;; binary->list integer -> binary-list
-(define (binary->list bin bits)
-  (for/list ([i bits])
-    (if (bitwise-bit-set? bin i) 1 0)))
 
 ;; Return O(n^2) pairs of a list
 (define (pairs lst)
@@ -911,7 +863,7 @@
 ;; O(n)
 (define (find-prev lst pred)
   (vec! lst)
-  (define ans (make-vector (alen lst) -1))
+  (define ans (make-vector (vlen lst) -1))
 
   (for/fold ([stack '()])
             ([(v i) (in-indexed lst)])
@@ -927,9 +879,6 @@
   (define n (length lst))
   (reverse (map (λ (i) (- n 1 i))
                 (find-prev (reverse lst) pred))))
-
-(define (boolean->number x)
-  (if x 1 0))
 
 ;; return a function lcp.
 ;; (lcp i) is the longest prefix substring which is also
@@ -953,8 +902,8 @@
       (if (= i j) 1 0))))
 
 (define (matrix/* mat1 mat2)
-  (define m (alen mat1))
-  (define n (alen mat2))
+  (define m (vlen mat1))
+  (define n (vlen mat2))
   (for/vector ([i (in-range 0 m)])
     (for/vector ([j (in-range 0 n)])
       (for/sum ([k (in-range 0 n)])
@@ -965,7 +914,7 @@
 ;; O(log n) fibonacci function.
 (define (matrix-expmod mat p modfn)
   (cond [(= p 0)
-         (identity-matrix (alen (aref mat 0)))]
+         (identity-matrix (vlen (aref mat 0)))]
         [else
          (define mat/2 (matrix-expmod mat (quotient p 2) modfn))
          (define ans (if (odd? p)
@@ -983,7 +932,7 @@
     body ...))
 
 ;; print expr and their value
-(define-syntax debugv
+(define-syntax P
   (syntax-rules ()
     [(_ expr)
      (debug (quote expr) expr)]
@@ -1019,78 +968,76 @@
       (displayln (format "~a\u2514\u2500 ~a" return-indent res))
       res)))
 
-;; cache the function `fn`
-;; (cachef! function-name)
-;; It use a hashtable for cache.
-(define-syntax-parse-rule (cachef! fn:id)
-  (set! fn (cachef-hash fn)))
 
-;; return a hash table cached version of function `fn`
-(define (cachef-hash fn)
-  (let ([cache (make-hash)])
-    (lambda args
-      (when (not (hash-has-key? cache args))
-        (hash-set! cache args (apply fn args)))
-      (hash-ref cache args))))
+;; cache the procedure using a hash table
+;; usage: just replace (define something ...) with (define/cache something ...)
+(define-syntax-parser define/cache
+  [(_ (fname:id args:id ...)
+      body ...)
+   #'(define fname
+       (letrec ([cache (make-hash)]
+                [fn
+                 (λ (args ...)
+                   body ...)]
+                [fname
+                 (λ (args ...)
+                   (define key (list args ...))
+                   (cond [(hash-has-key? cache key)
+                          (hash-ref cache key)]
+                         [else
+                          (define val (fn args ...))
+                          (hash-set! cache key val)
+                          val]))])
+         fname))])
 
-;; (cachef-vec! function-name dims ... not-exist-value)
-;; use vector for cache.
-;; dims are number or expression that evaluate to number
-;; not-exist-value is the value that indicate that the
-;; key-value pair is not exist.
-(define-syntax-parse-rule (cachef-vec! fn:id hints:expr ... init)
-  (set! fn (cachef-vec fn hints ... init)))
+;; cache the procedure using vectors
+(define-syntax-parser define/cache-vec
+  [(_ (fname:id args:id ...) (dims ... init)
+      transformer
+      body ...)
+   (with-syntax ([(inames ...) (generate-temporaries #'(args ...))])
+     #'(define fname
+         (letrec ([cache (make-array dims ... init)]
+                  [to-index transformer]
+                  [fn
+                   (λ (args ...)
+                     body ...)]
+                  [fname
+                   (λ (args ...)
+                     (define-values (inames ...) (to-index args ...))
+                     (when (= init (aref cache inames ...))
+                       (aset! cache inames ... (fn args ...)))
+                     (aref cache inames ...))])
+           fname)))])
 
-(define-syntax-parser cachef-vec
-  [(_ fn:id hints:expr ... init)
-   (with-syntax ([(args ...) (generate-temporaries #'(hints ...))])
-     #'(let* ([cache (make-array (* hints ...) init)]
-              [ori-fn fn])
-         (define hs (list hints ...))
-         (define dims
-           (cdr (reverse (scanl * 1 (reverse hs)))))
+;; cache the procedure using fixnum vectors
+(define-syntax-parser define/cache-fxvec
+  [(_ (fname:id args:id ...) (dims ... init)
+      transformer
+      body ...)
+   (with-syntax ([(inames ...) (generate-temporaries #'(args ...))])
+     #'(define fname
+         (letrec ([cache (make-fxvector (* dims ...) init)]
+                  [to-index transformer]
+                  [fn
+                   (λ (args ...)
+                     body ...)]
+                  [hs (list dims ...)]
+                  [real-dims (cdr (reverse (scanl * 1 (reverse hs))))]
+                  [args->index
+                   (λ ps
+                     (for/sum ([p (in-list ps)]
+                               [d (in-list real-dims)])
+                       (* p d)))]
+                  [fname
+                   (λ (args ...)
+                     (define-values (inames ...) (to-index args ...))
+                     (define index (args->index inames ...))
+                     (when (= init (fxvector-ref cache index))
+                       (fxvector-set! cache index (fn args ...)))
+                     (fxvector-ref cache index))])
+           fname)))])
 
-         (define (args->index . ps)
-           (for/sum ([p ps]
-                     [d dims])
-             (* p d)))
-
-         (lambda (args ...)
-           (cond [(or (< args 0) ...
-                      (>= args hints) ...)
-                  (ori-fn args ...)]
-                 [else
-                  (define index (args->index args ...))
-                  (when (equal? init (aref cache index))
-                    (aset! cache index (ori-fn args ...)))
-                  (aref cache index)]))))])
-
-;; (cachef-opt! function-name dims ... not-exist-value)
-;; fully optimized cache function
-;; the function arguments should be non-negative numbers,
-;; the return value should be fixnum.
-(define-syntax-parse-rule (cachef-opt! fn:id hints:expr ... init)
-  (set! fn (cachef-opt fn hints ... init)))
-
-(define-syntax-parser cachef-opt
-  [(_ fn:id hints:expr ... init)
-   (with-syntax ([(args ...) (generate-temporaries #'(hints ...))])
-     #'(let* ([cache (make-fxvector (* hints ...) init)]
-              [ori-fn fn])
-         (define hs (list hints ...))
-         (define dims
-           (cdr (reverse (scanl * 1 (reverse hs)))))
-
-         (define (args->index . ps)
-           (for/sum ([p ps]
-                     [d dims])
-             (* p d)))
-
-         (lambda (args ...)
-           (define index (args->index args ...))
-           (when (equal? init (fxvector-ref cache index))
-             (fxvector-set! cache index (ori-fn args ...)))
-           (fxvector-ref cache index))))])
 
 (define-syntax-rule (run-once! fn)
   (set! fn (run-once fn)))

@@ -7,3 +7,6 @@
 (test-case 1)
 (type-case 1)
 (bsearch-least 2)
+(define/cache 1)
+(define/cache-vec 1)
+(define/cache-fxvec 1)
