@@ -16,12 +16,15 @@
 ;; ** Counter
 ;; ** Trie
 ;; ** Char Table
+;; ** AVL Tree
+;; ** Freq Tracker
 ;; * Algorithm
 ;; ** Range Sum
 ;; ** Expmod
 ;; ** Count Inversion
 ;; ** Binary Search
 ;; ** Graph
+;; ** Tree
 ;; * Functional
 ;; ** Range
 ;; ** Bitwise
@@ -47,6 +50,7 @@
 (require (rename-in racket/unsafe/ops
                     [unsafe-fxquotient quotient]))
 (require racket/fixnum)
+(require racket/generator)
 
 ;; * Data structure
 
@@ -103,14 +107,57 @@
     (aset! arr dims1 ... (aref arr dims2 ...))
     (aset! arr dims2 ... t)))
 
+(define (vref arr dims)
+  (if (null? dims)
+      arr
+      (vref (vector-ref arr (car dims)) (cdr dims))))
+
+(define (vset! arr dims v)
+  (if (null? (cdr dims))
+      (vector-set! arr (car dims) v)
+      (vset! (vector-ref arr (car dims)) (cdr dims) v)))
+
+(define (expand-new-size old-size wanted-size)
+  (max wanted-size (+ 2 (* 2 old-size))))
+
+(define (vector-expand vec size init)
+  (define new-size (expand-new-size (vector-length vec) size))
+  (let ([new-vec (make-vector new-size init)])
+    (vector-copy! new-vec 0 vec)
+    new-vec))
+
+(define (safe-ref-or-expand arr dim init)
+  (if (>= dim (vector-length arr))
+      (vector-expand arr (add1 dim) init)
+      arr))
+
+(define-syntax can-ref?
+  (syntax-rules ()
+    [(_ arr dim)
+     (< dim (vector-length arr))]
+    [(_ arr dim1 dims ...)
+     (let ([dim1v dim1])
+       (and (< dim1v (vector-length arr))
+            (can-ref? (vector-ref arr dim1v) dims ...)))]))
+
+(define-syntax aexpand!
+  (syntax-rules ()
+    [(_ arr dim init)
+     (safe-ref-or-expand arr dim init)]
+    [(_ arr dim1 dims ... init)
+     (let* ([dim1v dim1]
+            [new-vec (safe-ref-or-expand arr dim1v #())])
+       (vector-set! new-vec dim1v (aexpand! (vector-ref new-vec dim1v) dims ... init))
+       new-vec)]))
+
 ;; ** Flattened Multidimensional Array
 
 (struct FlattenedArray
   (vec ds))
 
 (define (farray/args->index fa dims)
-  (for/sum ([d dims]
-            [w (FlattenedArray-ds fa)])
+  (for/sum ([d (in-vector dims)]
+            [w (in-list (FlattenedArray-ds fa))])
     (* d w)))
 
 (define (make-farray dims init)
@@ -297,8 +344,8 @@
 
 ;; a simple abstraction of a bitset of a list
 
-(define (full-bitset lst)
-  (sub1 (expt 2 (length lst))))
+(define (full-bitset n)
+  (sub1 (expt 2 n)))
 
 (define (empty-bitset)
   0)
@@ -322,6 +369,15 @@
   (if (zero? bits)
       0
       (add1 (bitset-count (bitwise-and bits (sub1 bits))))))
+
+(define (bitset-union bits1 bits2)
+  (bitwise-ior bits1 bits2))
+
+(define (bitset-intersect bits1 bits2)
+  (bitwise-and bits1 bits2))
+
+(define (bitset-subtract bits1 bits2)
+  (bitwise-xor bits1 (bitset-intersect bits1 bits2)))
 
 ;; ** Heap
 
@@ -363,9 +419,14 @@
 
 ;; ** Skip List
 
-(define (skip-list-update! sl key fn default)
-  (skip-list-set! sl key
-                  (fn (skip-list-ref sl key default))))
+(define skip-list-update!
+  (case-lambda
+    [(sl key fn)
+     (skip-list-set! sl key
+                     (fn (skip-list-ref sl key)))]
+    [(sl key fn default)
+     (skip-list-set! sl key
+                     (fn (skip-list-ref sl key default)))]))
 
 ;; return a list of keys in (inclusive-range beg end)
 (define (skip-list-range sl beg end)
@@ -378,9 +439,14 @@
 
 ;; ** Splay Tree
 
-(define (splay-tree-update! sl key fn default)
-  (splay-tree-set! sl key
-                   (fn (splay-tree-ref sl key default))))
+(define splay-tree-update!
+  (case-lambda
+    [(sl key fn)
+     (splay-tree-set! sl key
+                      (fn (splay-tree-ref sl key)))]
+    [(sl key fn default)
+     (splay-tree-set! sl key
+                      (fn (splay-tree-ref sl key default)))]))
 
 ;; ** Counter
 
@@ -412,8 +478,8 @@
   (make-vector 26 #f))
 
 (define (trie-add! alphabet str)
-  (for/fold ([ab alphabet])
-            ([c str])
+  (for/fold ([ab (in-vector alphabet)])
+            ([c (in-string str)])
     (define x (lower-char->integer c))
     (when (false? (vector-ref ab x))
       (vector-set! ab x (make-trie)))
@@ -451,6 +517,266 @@
   (define i (char->integer c))
   (fxvector-set! abt i (updater (fxvector-ref abt i))))
 
+;; AVL Tree
+;; alternative to data/skip-list or data/splay-tree but faster
+;; provides similar interface as data/skip-list, but does not
+;; support dictionary interface.
+;; Only support number as key.
+
+(struct AVLNode
+  (value height left right))
+
+(define (AVL-balance-factor tree)
+  (match tree
+    [#f 0]
+    [(AVLNode _ _ left right)
+     (- (AVL-height right) (AVL-height left))]))
+
+(define (AVL-height tree)
+  (match tree
+    [#f 0]
+    [_ (AVLNode-height tree)]))
+
+(define (AVL val left right)
+  (AVLNode val (add1 (max (AVL-height left) (AVL-height right))) left right))
+
+(define (AVL-rotate-left tree)
+  (match tree
+    [(AVLNode a _ b (AVLNode c _ d e))
+     (AVL c (AVL a b d) e)]))
+
+(define (AVL-rotate-right tree)
+  (match tree
+    [(AVLNode a _ (AVLNode b _ c d) e)
+     (AVL b c (AVL a d e))]))
+
+(define (AVL-rotate-right-left tree)
+  (match tree
+    [(AVLNode a _ b (AVLNode c _ (AVLNode d _ e f) g))
+     (AVL d (AVL a b e) (AVL c f g))]))
+
+(define (AVL-rotate-left-right tree)
+  (match tree
+    [(AVLNode a _ (AVLNode b _ c (AVLNode d _ e f)) g)
+     (AVL d (AVL b c e) (AVL a f g))]))
+
+(define (AVL-balance tree)
+  (cond [(and (= -2 (AVL-balance-factor tree))
+              (= 1 (AVL-balance-factor (AVLNode-left tree))))
+         (AVL-rotate-left-right tree)]
+        [(= -2 (AVL-balance-factor tree))
+         (AVL-rotate-right tree)]
+        [(and (= 2 (AVL-balance-factor tree))
+              (= -1 (AVL-balance-factor (AVLNode-right tree))))
+         (AVL-rotate-right-left tree)]
+        [(= 2 (AVL-balance-factor tree))
+         (AVL-rotate-left tree)]
+        [else tree]))
+
+(define (AVL-update tree key updater default root)
+  (match tree
+    [#f
+     (set-AVLRoot-size! root (add1 (AVLRoot-size root)))
+     (AVL (cons key (updater default)) #f #f)]
+    [(AVLNode pair _ left right)
+     (match (compare key (car pair))
+       ['= (AVL (cons key (updater (cdr pair))) left right)]
+       ['< (AVL-balance (AVL pair (AVL-update left key updater default root) right))]
+       ['> (AVL-balance (AVL pair left (AVL-update right key updater default root)))])]))
+
+(define (AVL-ref tree key default)
+  (match tree
+    [#f default]
+    [(AVLNode pair _ left right)
+     (match (compare key (car pair))
+       ['= (cdr pair)]
+       ['< (AVL-ref left key default)]
+       ['> (AVL-ref right key default)])]))
+
+(define (AVL-remove tree key root)
+  (match tree
+    [#f #f]
+    [(AVLNode pair _ left right)
+     (match (compare key (car pair))
+       ['= (set-AVLRoot-size! root (sub1 (AVLRoot-size root)))
+           (AVL-merge left right)]
+       ['< (AVL-balance (AVL pair (AVL-remove left key root) right))]
+       ['> (AVL-balance (AVL pair left (AVL-remove right key root)))])]))
+
+(define (AVL-merge left right)
+  (match* (left right)
+    [(#f right) right]
+    [(left #f) left]
+    [(left right)
+     (define-values (min-pair new-right) (AVL-extract-min right))
+     (AVL-balance (AVL min-pair left new-right))]))
+
+(define (AVL-extract-min tree)
+  (match tree
+    [(AVLNode p _ #f right)
+     (values p right)]
+    [(AVLNode p _ left right)
+     (define-values (min-pair new-left) (AVL-extract-min left))
+     (values min-pair (AVL-balance (AVL p new-left right)))]))
+
+(struct AVLRoot
+  (size node)
+  #:mutable)
+
+(define (make-avl-tree)
+  (AVLRoot 0 #f))
+
+(define avl-tree? AVLRoot?)
+
+(define *none* (gensym 'none))
+
+(define (avl-tree-ref avl key [default *none*])
+  (define val (AVL-ref (AVLRoot-node avl) key default))
+  (if (eq? val *none*)
+      (error 'avl-tree-ref "no value found for key ~v" key)
+      val))
+
+(define (avl-tree-has-key? avl key)
+  (define notfound (gensym 'notfound))
+  (not (eq? notfound (avl-tree-ref avl key notfound))))
+
+(define (avl-tree-update! avl key updater [default *none*])
+  (set-AVLRoot-node! avl (AVL-update (AVLRoot-node avl) key updater default avl))
+  (void))
+
+(define (avl-tree-set! avl key val)
+  (avl-tree-update! avl key (λ (_) val) val))
+
+(define (avl-tree-remove! avl key)
+  (set-AVLRoot-node! avl (AVL-remove (AVLRoot-node avl) key avl))
+  (void))
+
+(define (avl-tree-count avl)
+  (AVLRoot-size avl))
+
+(define (avl-tree->list avl)
+  (define gen
+    (generator ()
+      (let rec ([node (AVLRoot-node avl)])
+        (match node
+          [#f (void)]
+          [(AVLNode kv _ left right)
+           (rec left)
+           (yield kv)
+           (rec right)]))))
+
+  (for/list ([v (in-producer gen (void))])
+    v))
+
+(struct AVL-Iter
+  (stack))
+
+(define (make-avl-iter)
+  (AVL-Iter '()))
+
+(define (AVL-iter-push iter node)
+  (AVL-Iter (cons node (AVL-Iter-stack iter))))
+
+(define avl-tree-iter? AVL-Iter?)
+
+(define (avl-tree-iterate-next avl iter)
+  (define (up node parents)
+    (match parents
+      ['() #f]
+      [(cons p rest)
+       (if (eq? node (AVLNode-left p))
+           (AVL-Iter parents)
+           (up p rest))]))
+
+  (define (down p parents)
+    (define left (AVLNode-left p))
+    (if (false? left)
+        (AVL-Iter (cons p parents))
+        (down left (cons p parents))))
+
+  (match (AVL-Iter-stack iter)
+    ['() #f]
+    [(and stack (cons node parents))
+     (define right (AVLNode-right node))
+     (if (false? right)
+         (up node parents)
+         (down right stack))]))
+
+(define (avl-tree-iterate-key avl iter)
+  (car (AVLNode-value (car (AVL-Iter-stack iter)))))
+
+(define (avl-tree-iterate-value avl iter)
+  (cdr (AVLNode-value (car (AVL-Iter-stack iter)))))
+
+(define (avl-tree-iterate-least-ok avl ok?)
+  (define (leftmost node iter)
+    (match node
+      [#f #f]
+      [(AVLNode (cons key _) _ left right)
+       (define iter2 (AVL-iter-push iter node))
+       (if (ok? key)
+           (let ([lm (leftmost left iter2)])
+             (if (false? lm)
+                 iter2
+                 lm))
+           (leftmost right iter2))]))
+
+  (leftmost (AVLRoot-node avl) (make-avl-iter)))
+
+(define (avl-tree-iterate-greatest-ok avl ok?)
+  (define (rightmost node iter)
+    (match node
+      [#f #f]
+      [(AVLNode (cons key _) _ left right)
+       (define iter2 (AVL-iter-push iter node))
+       (if (ok? key)
+           (let ([rm (rightmost right iter2)])
+             (if (false? rm)
+                 iter2
+                 rm))
+           (rightmost left iter2))]))
+
+  (rightmost (AVLRoot-node avl) (make-avl-iter)))
+
+(define (avl-tree-iterate-least/>? avl key)
+  (avl-tree-iterate-least-ok avl (λ (k) (> k key))))
+
+(define (avl-tree-iterate-least/>=? avl key)
+  (avl-tree-iterate-least-ok avl (λ (k) (>= k key))))
+
+(define (avl-tree-iterate-least avl)
+  (avl-tree-iterate-least-ok avl (λ (_) #t)))
+
+(define (avl-tree-iterate-greatest/<? avl key)
+  (avl-tree-iterate-greatest-ok avl (λ (k) (< k key))))
+
+(define (avl-tree-iterate-greatest/<=? avl key)
+  (avl-tree-iterate-greatest-ok avl (λ (k) (<= k key))))
+
+(define (avl-tree-iterate-greatest avl)
+  (avl-tree-iterate-greatest-ok avl (λ (_) #t)))
+
+;; Freq Tracker
+
+(struct Freq-Tracker
+  (val cnt cmp)
+  #:mutable
+  #:transparent)
+
+(define (make-freq-tracker cmp)
+  (Freq-Tracker #f 0 cmp))
+
+(define (freq-tracker-add! vc newv)
+  (match-define (Freq-Tracker val cnt cmp) vc)
+  (cond [(or (false? val) (cmp newv val))
+         (set-Freq-Tracker-val! vc newv)
+         (set-Freq-Tracker-cnt! vc 1)]
+        [(= newv val)
+         (set-Freq-Tracker-cnt! vc (add1 cnt))]))
+
+(define freq-tracker-value Freq-Tracker-val)
+(define freq-tracker-count Freq-Tracker-cnt)
+
 ;; * Algorithm
 
 ;; ** Range Sum
@@ -463,7 +789,7 @@
 (define (range-sum arr)
   (let* ([n (length arr)]
          [prefix (make-vector (add1 n) 0)])
-    (for ([v arr]
+    (for ([v (in-list arr)]
           [i (in-inclusive-range 1 n)])
       (aset! prefix i (+ v (aref prefix (sub1 i)))))
     (λ (i j) (- (aref prefix j) (aref prefix i)))))
@@ -487,10 +813,10 @@
 (define (count-inversions fenwick-tree lst)
   (let* ([n (vector-length fenwick-tree)]
          [res (for/fold ([res 0])
-                        ([v lst])
+                        ([v (in-list lst)])
                 (ft-add! fenwick-tree v 1)
                 (+ res (ft-sum fenwick-tree (add1 v) n)))])
-    (for ([v lst])
+    (for ([v (in-list lst)])
       (ft-add! fenwick-tree v -1))
     res))
 
@@ -520,9 +846,16 @@
 (define (graph-add-dir-edge! g from to)
   (hash-update! g from (λ (old) (cons to old)) '()))
 
+(define (graph-add-dir-weight-edge! g from to weight)
+  (hash-update! g from (λ (old) (cons (cons to weight) old)) '()))
+
 (define (graph-add-undir-edge! g u v)
   (graph-add-dir-edge! g u v)
   (graph-add-dir-edge! g v u))
+
+(define (graph-add-undir-weight-edge! g u v w)
+  (graph-add-dir-weight-edge! g u v w)
+  (graph-add-dir-weight-edge! g v u w))
 
 ;; build graph
 
@@ -533,6 +866,13 @@
       [(list u v) (graph-add-undir-edge! g u v)]))
   g)
 
+(define (undir-weight-edges->graph edges)
+  (define g (make-graph))
+  (for ([e edges])
+    (match e
+      [(list u v w) (graph-add-undir-weight-edge! g u v w)]))
+  g)
+
 (define (dir-edges->graph edges)
   (define g (make-hash))
   (for ([e edges])
@@ -540,12 +880,19 @@
       [(list u v) (graph-add-dir-edge! g u v)]))
   g)
 
+(define (dir-weight-edges->graph edges)
+  (define g (make-hash))
+  (for ([e edges])
+    (match e
+      [(list u v w) (graph-add-dir-weight-edge! g u v w)]))
+  g)
+
 (define (undir-edges->tree edges root from)
   (define g (undir-edges->graph edges))
   (define tree-edges '())
 
   (define (go root from)
-    (for ([c (hash-ref g root '())]
+    (for ([c (in-list (hash-ref g root '()))]
           #:when (not (equal? c from)))
       (set! tree-edges (cons (list root c) tree-edges))
       (go c root)))
@@ -558,7 +905,7 @@
 ;; return the shortest distance hash table and
 ;; the previous node hash table
 ; graph/dijkstra : (node, edgeof) -> (list dist prev)
-; edgeof : node -> (listof (cons node cost))
+; edgeof : (node, cost) -> (listof (cons node cost))
 ; node : any
 ; cost : non-negative number
 ; dist : (hash node cost)
@@ -571,21 +918,21 @@
     (cond [(heap-empty? h)
            (list dist prev)]
           [else
-           (match-define (cons d closest) (heap-min h))
+           (match-define (cons closest d) (heap-min h))
            (heap-remove-min! h)
-           (for ([edge (edgeof closest)])
+           (for ([edge (in-list (edgeof closest d))])
              (match-define (cons to cost) edge)
              (define d1 (+ d cost))
              (when (or (not (hash-has-key? dist to))
                        (< d1 (hash-ref dist to)))
                (hash-set! dist to d1)
                (hash-set! prev to closest)
-               (heap-add! h (cons d1 to))))
+               (heap-add! h (cons to d1))))
 
            (rec h)]))
 
-  (define h (make-heap (λ (a b) (<= (car a) (car b)))))
-  (heap-add! h (cons 0 s))
+  (define h (make-heap (λ (a b) (<= (cdr a) (cdr b)))))
+  (heap-add! h (cons s 0))
   (hash-set! dist s 0)
   (rec h))
 
@@ -611,7 +958,7 @@
   (define (loop nodes steps)
     (define new-nodes
       (for*/list ([node nodes]
-                  [nei (edgeof node)]
+                  [nei (edgeof node steps)]
                   #:when (not (hash-has-key? dist nei)))
         (hash-set! dist nei (add1 steps))
         nei))
@@ -622,7 +969,89 @@
   (loop starts 0)
   dist)
 
+;; ** Tree
+
+(struct Tree-Info
+  [size
+   root
+   depth-of
+   parent-of
+   children-of])
+
+(define (tree-traverse children root)
+  (define size 1)
+  (for ([(_ adjs) (in-hash children)])
+    (set! size (+ size (length adjs))))
+
+  (define depths (make-vector (+ size 1) 0))
+  (define parents (make-vector (+ size 1) root))
+
+  (define (traverse node depth)
+    (aset! depths node depth)
+    (for ([child (in-list (hash-ref children node '()))])
+      (aset! parents child node)
+      (traverse child (add1 depth))))
+
+  (traverse root 0)
+  (Tree-Info
+    size
+    root
+    (λ (x) (aref depths x))
+    (λ (x) (aref parents x))
+    (λ (x) (hash-ref children x '()))))
+
+(define (precompute-lca tree)
+  (define n (Tree-Info-size tree))
+  (define parent-of (Tree-Info-parent-of tree))
+  (define depth-of (Tree-Info-depth-of tree))
+  (define limit (exact-ceiling (log n 2)))
+
+  ;; steps-th ancestor of node `u`
+  (define (up u steps)
+    (for/fold ([u u])
+              ([i (in-range limit)]
+               #:when (bitwise-bit-set? steps i))
+      (up-p2 u i)))
+
+  ;; (2^steps)-th ancestor of node `u`
+  (define/cache-vec (up-p2 u steps)
+                    ((add1 n) limit #f)
+                    (values u steps)
+    (if (= steps 0)
+        (parent-of u)
+        (up-p2 (up-p2 u (sub1 steps)) (sub1 steps))))
+
+  (define (lca-of/same-depth u v)
+    (for/fold ([u u]
+               [v v]
+               #:result (up-p2 u 0))
+              ([steps (in-reverse-range 0 limit)])
+      (define ua (up-p2 u steps))
+      (define va (up-p2 v steps))
+      (if (not (= ua va))
+          (values ua va)
+          (values u v))))
+
+  (define (lca-of u v)
+    (define du (depth-of u))
+    (define dv (depth-of v))
+    (cond [(< du dv)
+           (lca-of v u)]
+          [else
+           (define diff (- du dv))
+           (define ua (up u diff))
+           (if (= ua v)
+               ua
+               (lca-of/same-depth ua v))]))
+
+  lca-of)
+
 ;; * Functional
+
+(define (if-false-then val default)
+  (if (false? val)
+      default
+      val))
 
 ;; ** Bitwise
 
@@ -653,15 +1082,19 @@
 
 ;; ** Range
 
-(define in-reverse-range
-  (case-lambda
-    [(from to) (in-range (sub1 to) (sub1 from) -1)]
-    [(from to delta) (in-range (- to delta) (- from delta) (- delta))]))
+(define-syntax in-reverse-range
+  (syntax-rules ()
+    [(_ to)
+     (in-reverse-range 0 to)]
+    [(_ from to)
+     (in-range (sub1 to) (sub1 from) -1)]))
 
-(define in-inclusive-reverse-range
-  (case-lambda
-    [(from to) (in-reverse-range from (add1 to))]
-    [(from to delta) (in-reverse-range from (+ to delta) delta)]))
+(define-syntax in-inclusive-reverse-range
+  (syntax-rules ()
+    [(_ to)
+     (in-inclusive-reverse-range 0 to)]
+    [(_ from to)
+     (in-reverse-range from (add1 to))]))
 
 ;; ** Points
 
@@ -670,8 +1103,8 @@
 (define (list->point lst)
   (Point (first lst) (second lst)))
 
-(define point-x car)
-(define point-y cdr)
+(define Point-x car)
+(define Point-y cdr)
 
 (define (point-map fn p1 p2)
   (Point (fn (car p1) (car p2))
@@ -698,7 +1131,7 @@
 ;; list->hash : (listof pair) -> hash
 (define (list->hash lst)
   (for/fold ([h (hash)])
-            ([pair lst])
+            ([pair (in-list lst)])
     (hash-set h (car pair) (cdr pair))))
 
 (define (compare x y)
@@ -706,10 +1139,50 @@
         [(< x y) '<]
         [else '>]))
 
-;; make a alphabet list from lowercase a to z
-(define (alphabet)
+(define (list-compare lst1 lst2 [less? <])
+  (match* (lst1 lst2)
+    [('() '()) '=]
+    [('() _) '<]
+    [(_ '()) '>]
+    [((cons x1 r1) (cons x2 r2))
+     (cond [(less? x1 x2) '<]
+           [(less? x2 x1) '>]
+           [else (list-compare r1 r2 less?)])]))
+
+(define (pair-compare p1 p2 [less? <])
+  (match* (p1 p2)
+    [((cons x1 y1) (cons x2 y2))
+     (cond [(less? x1 x2) '<]
+           [(less? x2 x1) '>]
+           [(less? y1 y2) '<]
+           [(less? y2 y1) '>]
+           [else '=])]))
+
+(define (list=? l1 l2 [less? <])
+  (eq? '= (list-compare l1 l2 less?)))
+
+(define (list<? l1 l2 [less? <])
+  (eq? '< (list-compare l1 l2 less?)))
+
+(define (list>? l1 l2 [less? <])
+  (eq? '> (list-compare l1 l2 less?)))
+
+(define (pair=? p1 p2 [less? <])
+  (eq? '= (pair-compare p1 p2 less?)))
+
+(define (pair<? p1 p2 [less? <])
+  (eq? '< (pair-compare p1 p2 less?)))
+
+(define (pair>? p1 p2 [less? <])
+  (eq? '> (pair-compare p1 p2 less?)))
+
+(define *alphabet-table*
   (map integer->char
        (inclusive-range (char->integer #\a) (char->integer #\z))))
+
+;; make a alphabet list from lowercase a to z
+(define (alphabet)
+  *alphabet-table*)
 
 (define-syntax-rule (cons! lst element)
   (set! lst (cons element lst)))
@@ -726,6 +1199,10 @@
 (define (minimum lst)
   (foldl min (car lst) lst))
 
+(define (enumerate seq)
+  (for/list ([(v i) (in-indexed seq)])
+    (cons i v)))
+
 (define (digit-char->integer c)
   (- (char->integer c) (char->integer #\0)))
 
@@ -738,15 +1215,20 @@
 (define (uppercase-char->integer c)
   (- (char->integer c) (char->integer #\A)))
 
+(define (take-atmost lst k)
+  (cond [(= k 0) '()]
+        [(null? lst) '()]
+        [else (cons (car lst) (take-atmost (cdr lst) (sub1 k)))]))
+
 (define (scanl proc init lst)
   (cons init
-        (for/list ([v lst])
+        (for/list ([v (in-list lst)])
           (set! init (proc v init))
           init)))
 
 (define (scanr proc init lst)
   (reverse
-    (for/list ([v (reverse lst)])
+    (for/list ([v (in-list (reverse lst))])
       (set! init (proc v init))
       init)))
 
@@ -774,8 +1256,8 @@
       (match bits
         [(== subset-size) stop]
         [_ (define res
-             (for/list ([i n]
-                        [val lst]
+             (for/list ([i (in-range n)]
+                        [val (in-list lst)]
                         #:when (bitwise-bit-set? bits i))
                val))
            (set! bits (add1 bits))
@@ -805,8 +1287,8 @@
     [_ (reverse
          (map reverse
               (for/fold ([res '()])
-                        ([p lst]
-                         [v (cdr lst)])
+                        ([p (in-list lst)]
+                         [v (in-list (cdr lst))])
                 (match* [res (same? (key p) (key v))]
                   [('() #t)
                    (list (list v p))]
@@ -821,8 +1303,8 @@
 (define (pairs lst)
   (define vec (list->vector lst))
   (define n (vector-length vec))
-  (for*/list ([j n]
-              [i j])
+  (for*/list ([j (in-range n)]
+              [i (in-range j)])
     (cons (vector-ref vec i) (vector-ref vec j))))
 
 ;; Return O(n^2) sublists of list `lst`
@@ -897,8 +1379,8 @@
   (λ (i) (aref prefix i)))
 
 (define (identity-matrix n)
-  (for/vector ([i n])
-    (for/vector ([j n])
+  (for/vector ([i (in-range n)])
+    (for/vector ([j (in-range n)])
       (if (= i j) 1 0))))
 
 (define (matrix/* mat1 mat2)
@@ -920,8 +1402,8 @@
          (define ans (if (odd? p)
                          (matrix/* mat (matrix/* mat/2 mat/2))
                          (matrix/* mat/2 mat/2)))
-         (for/vector ([row ans])
-           (for/vector ([v row])
+         (for/vector ([row (in-range ans)])
+           (for/vector ([v (in-range row)])
              (modfn v)))]))
 
 ;; * Syntax
@@ -990,35 +1472,105 @@
                           val]))])
          fname))])
 
-;; cache the procedure using vectors
-(define-syntax-parser define/cache-vec
-  [(_ (fname:id args:id ...) (dims ... init)
-      transformer
+;; using dynamic growable vector to cache the procedure
+(define-syntax-parser define/cache-dvec
+  [(_ (fname:id args:id ...) (init)
+      (transformers ...)
       body ...)
-   (with-syntax ([(inames ...) (generate-temporaries #'(args ...))])
+   (with-syntax ([(inames ...) (generate-temporaries #'(transformers ...))])
      #'(define fname
-         (letrec ([cache (make-array dims ... init)]
-                  [to-index transformer]
+         (letrec ([cache #()]
+                  [to-index (λ (args ...) (values transformers ...))]
                   [fn
                    (λ (args ...)
                      body ...)]
                   [fname
                    (λ (args ...)
                      (define-values (inames ...) (to-index args ...))
-                     (when (= init (aref cache inames ...))
+                     (define can-ref (can-ref? cache inames ...))
+                     (define cached-val (if can-ref (aref cache inames ...) init))
+                     (cond [(or (not can-ref) (equal? init cached-val))
+                            (when (not can-ref)
+                              (set! cache (aexpand! cache inames ... init)))
+                            (define val (fn args ...))
+                            (aset! cache inames ... val)
+                            val]
+                           [else cached-val]))])
+           fname)))])
+
+;; cache the procedure using vectors
+(define-syntax-parser define/cache-vec
+  [(_ (fname:id args:id ...) (dims ... init)
+      transformer
+      body ...)
+   (with-syntax ([(inames ...) (generate-temporaries #'(dims ...))])
+     #'(define fname
+         (letrec ([cache (make-array dims ... init)]
+                  [to-index (λ (args ...) transformer)]
+                  [fn
+                   (λ (args ...)
+                     body ...)]
+                  [fname
+                   (λ (args ...)
+                     (define-values (inames ...) (to-index args ...))
+                     (when (equal? init (aref cache inames ...))
                        (aset! cache inames ... (fn args ...)))
                      (aref cache inames ...))])
            fname)))])
+
+
+;; cache the procedure using vectors but call the original function
+;; if the arguments can't fit dims...
+(define-syntax-parser define/cache-vec-guard
+  [(_ (fname:id args:id ...) (dims ... init)
+      transformer
+      body ...)
+   (with-syntax ([(inames ...) (generate-temporaries #'(dims ...))])
+     #'(define fname
+         (letrec ([cache (make-array dims ... init)]
+                  [to-index (λ (args ...) transformer)]
+                  [fn
+                   (λ (args ...)
+                     body ...)]
+                  [fname
+                   (λ (args ...)
+                     (cond [(or (< args 0) ...
+                                (>= args dims) ...)
+                            (fn args ...)]
+                           [else
+                            (define-values (inames ...) (to-index args ...))
+                            (when (equal? init (aref cache inames ...))
+                              (aset! cache inames ... (fn args ...)))
+                            (aref cache inames ...)]))])
+           fname)))])
+
+(define-syntax-parser define/cache-vec1
+  [(_ (fname:id args:id ...) (dim init)
+      transformer
+      body ...)
+   #'(define fname
+       (letrec ([cache (make-fxvector dim init)]
+                [to-index (λ (args ...) transformer)]
+                [fn
+                 (λ (args ...)
+                   body ...)]
+                [fname
+                 (λ (args ...)
+                   (define iname (to-index args ...))
+                   (when (= init (fxvector-ref cache iname))
+                     (fxvector-set! cache iname (fn args ...)))
+                   (fxvector-ref cache iname))])
+         fname))])
 
 ;; cache the procedure using fixnum vectors
 (define-syntax-parser define/cache-fxvec
   [(_ (fname:id args:id ...) (dims ... init)
       transformer
       body ...)
-   (with-syntax ([(inames ...) (generate-temporaries #'(args ...))])
+   (with-syntax ([(inames ...) (generate-temporaries #'(dims ...))])
      #'(define fname
          (letrec ([cache (make-fxvector (* dims ...) init)]
-                  [to-index transformer]
+                  [to-index (λ (args ...) transformer)]
                   [fn
                    (λ (args ...)
                      body ...)]
@@ -1300,20 +1852,29 @@
 
 ;; as function
 
-;; make a function proxy for a vector or a hash table
+;; make a function proxy for a list/vector/hash table
 
-(define-syntax-parser as-function1!
-  [(_ (var:id args ...))
-   #'(set! var
-           (let ([old-var var])
-             (cond [(vector? old-var)
-                    (λ (args ...) (aref old-var args ...))]
-                   [(hash? old-var)
-                    (λ (x) (hash-ref old-var x))])))])
+(define ((vector->function vec) i)
+  (vector-ref vec i))
 
-(define-syntax-parse-rule (as-function! spec ...)
-  (let ()
-    (as-function1! spec) ...))
+(define-syntax-rule (vector->function! vec)
+  (set! vec (vector->function vec)))
+
+(define-syntax-rule (vector*->function! vec args ...)
+  (set! vec (λ (args ...) (aref vec args ...))))
+
+(define ((hash->function hash) k)
+  (hash-ref hash k))
+
+(define-syntax-rule (hash->function! hash)
+  (set! hash (hash->function hash)))
+
+(define (list->function lst)
+  (define vec (list->vector lst))
+  (λ (i) (vector-ref vec i)))
+
+(define-syntax-rule (list->function! lst)
+  (set! lst (list->function lst)))
 
 ;; others
 

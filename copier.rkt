@@ -57,8 +57,8 @@
   (parameterize ([current-annotations info-collector]
                  [current-namespace base-ns])
     (define expanded (expand
-                      (with-module-reading-parameterization
-                        (lambda () (read-syntax src in)))))
+                       (with-module-reading-parameterization
+                         (lambda () (read-syntax src in)))))
     (add-syntax expanded)
     (done))
 
@@ -149,11 +149,11 @@
       [_ (void)]))
 
   (string-join
-   (for*/list ([stx stxes]
-               [pos (in-value (sub1 (syntax-position stx)))]
-               #:when (marked? pos))
-     (substring code pos (+ pos (syntax-span stx))))
-   "\n\n"))
+    (for*/list ([stx stxes]
+                [pos (in-value (sub1 (syntax-position stx)))]
+                #:when (marked? pos))
+      (substring code pos (+ pos (syntax-span stx))))
+    "\n\n"))
 
 (let* ([lang-line (make-parameter #f)]
        [filename (command-line #:once-any
@@ -170,10 +170,10 @@
                           ""
                           "#lang racket\n"))])
   (displayln
-   (string-append
-    (string-trim
-     (for/fold ([replaced (string-append code "\n" copied-code)])
-               ([rep removed])
-       (string-replace replaced rep "")))
-    "\n")))
+    (string-append
+      (string-trim
+        (for/fold ([replaced (string-append copied-code "\n" code)])
+                  ([rep removed])
+          (string-replace replaced rep "")))
+      "\n")))
 
