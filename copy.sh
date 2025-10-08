@@ -11,5 +11,5 @@ clipcopy () {
     fi
 }
 
-racket copier.rkt run.rkt > output.rkt
+racket bundler.rkt --separator run.rkt > output.rkt
 clipcopy output.rkt
