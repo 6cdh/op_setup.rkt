@@ -6,8 +6,8 @@ When You need to share or submit a piece of code, but your code are distributed 
 
 ## How to use
 
-1. Put your main function in `run.rkt`.
-2. Require your files through `(require "path/to/file.rkt")` in `run.rkt`.
+1. Put your main code in `run.rkt` that executes directly.
+2. Require your library through `(require "path/to/file.rkt")` in `run.rkt`.
 3. Run `copy.sh`. It will analyze your code in `run.rkt`, and copy necessary dependency from your other local files, then write them into `output.rkt` and copy it to your clipboard.
 4. You can share it now!
 
